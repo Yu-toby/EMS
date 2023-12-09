@@ -216,7 +216,6 @@ class load:
         self.power_avg_15min = sum(self.power_history_15min)/len(self.power_history_15min)
         self.power_avg_30min = sum(self.power_history_30min)/len(self.power_history_30min)
             
-            
 class grid:
     def __init__(self):
         grid_data = db["grid"].find_one({"name":"Grid"})
