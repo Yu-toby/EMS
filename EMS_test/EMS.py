@@ -238,8 +238,9 @@ class EVCS:
             self.start_SOC = 0
             self.now_SOC = 0
 
-            self.pile_status = {pile: {'power': 0, 'ev_number': None}
+            self.pile_status = {pile: {'power': 0, 'ev_number': None, 'already_time': 0}
                               for pile in self.pile_number}
+            
 
       def add_ev(self, ev):
             # 新進一輛車，連接到充電站
@@ -247,16 +248,20 @@ class EVCS:
                   if status['ev_number'] is None:
                         ev.pile_number = pile
                         status['ev_number'] = ev.number
+                        # status['power'] = ev.calculate_charge_power()[0]
                         self.connected_evs.append(ev)
                         break
 
-            self.calculate_total_power_needed()
-
-      def calculate_total_power_needed(self):
-            # 計算所有連接車輛的總充電功率需求
-            self.total_power_needed = sum(
-                  ev.calculate_charge_power() for ev in self.connected_evs)
-            return self.total_power_needed
+      def ev_state(self):
+            for ev in self.connected_evs:
+                  # print(f"already_time: {self.pile_status[ev.pile_number]['already_time']}")
+                  charge_power, charge_soc = ev.calculate_charge_power(self.pile_status[ev.pile_number]['already_time'])
+                  ev.now_SOC += charge_soc
+                  self.pile_status[ev.pile_number]['power'] = charge_power
+                  # print(f"EVCS {ev.pile_number} - Connected EV: {ev.number} - SOC: {ev.now_SOC:.2f} - Charge Power: {charge_power:.2f}")
+                  # print(f"time: {ev.charge_already_time}")
+                  self.pile_status[ev.pile_number]['already_time'] += 1
+            return self.connected_evs
 
       def get_pile_power_summary(self):
             # 取得各充電樁的狀態及總功率
@@ -265,6 +270,11 @@ class EVCS:
             total_power = sum(status['power']
                               for status in self.pile_status.values())
             return summary, total_power
+      
+      def get_ev_current_soc(self):
+            # 取得車輛充電當下SOC
+            summary = {ev.number: ev.now_SOC for ev in self.connected_evs}
+            return round(summary[1], 2), round(summary[2], 2)
 
 
 class EV:
@@ -280,29 +290,35 @@ class EV:
             self.charge_pi = 0  # 倍分配充電係數
             self.pile_number = None  # 車輛連接的充電樁編號
 
-      def calculate_charge_power(self):
+      def calculate_charge_power(self, already_time):
             # 計算每小時所需充電功率
+            self.charge_already_time = already_time
             if self.charge_already_time < self.charge_end_time:
                   remaining_time = self.charge_end_time - self.charge_already_time
-                  charge_soc_per_second = (
-                  self.target_SOC - self.now_SOC) / remaining_time
+                  charge_soc_per_second = (self.target_SOC - self.now_SOC) / remaining_time
                   charge_power_per_second = charge_soc_per_second * self.battery_max_capacity
-                  self.charge_already_time += 1
-                  return charge_power_per_second
+                  # self.charge_already_time += 1
+                  return round(charge_power_per_second, 2), round(charge_soc_per_second, 2)
             else:
-                  return 0
+                  return 0, 0
 
 
 # 使用範例
 evcs = EVCS()
 ev1 = EV(1, 0.8, 0.2, 50, 4)
+# for _ in range(ev1.charge_end_time):
+#       print(ev1.calculate_charge_power())
 evcs.add_ev(ev1)
 ev2 = EV(2, 0.9, 0.25, 60, 3)
 evcs.add_ev(ev2)
 
 # 模擬充電過程
 for _ in range(max(ev1.charge_end_time, ev2.charge_end_time)):
-      evcs.calculate_total_power_needed()
+      # evcs.calculate_total_power_needed()
+      evcs.ev_state()
+      # print(f"ev1 power: {ev1.calculate_charge_power()}", f"ev2 power: {ev2.calculate_charge_power()}")
       pile_summary, total_power = evcs.get_pile_power_summary()
+      ev_summary = evcs.get_ev_current_soc()
       print(f"Pile Summary: {pile_summary}")
       print(f"Total Power: {total_power}")
+      print(f"EV Summary: {ev_summary}")
