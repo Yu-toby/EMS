@@ -174,7 +174,7 @@ class ESS:
 
 
 class GC:
-      def __init__(self, evcs, ess):
+      def __init__(self):
             # GC參數
             self.if_ess_provide_power = False
             self.if_PV_provide_power = False
@@ -187,9 +187,9 @@ class GC:
             self.grid_provide_power_for_pile = 0
             self.grid_provide_power_for_ess = 0
 
-            self.ess = ess
+            self.ess = ESS()
             self.grid = Grid()
-            self.evcs = evcs
+            self.evcs = EVCS()
 
       def provide_power(self, user_provided_time):
             self.tou = TOU(current_time=user_provided_time)
@@ -369,11 +369,13 @@ class EV:
 
 evcs = EVCS()
 ess = ESS()
-gc = GC(evcs, ess)
+gc = GC()
 ev1 = EV(1, 0.8, 0.2, 50, 7, 11)
 evcs.add_ev(ev1)
 ev2 = EV(2, 0.9, 0.25, 60, 17, 20)
 evcs.add_ev(ev2)
+# ev3 = EV(3, 0.9, 0.2, 50, 22, 5)
+# evcs.add_ev(ev3)
 
 # 模擬充電過程
 for time_steps in range(24):
