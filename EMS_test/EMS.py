@@ -377,107 +377,109 @@ evcs.add_ev(ev2)
 # ev3 = EV(3, 0.9, 0.2, 50, 22, 5)
 # evcs.add_ev(ev3)
 
-# 模擬充電過程
-for time_steps in range(24):
-      user_provided_time = datetime(year=2023, month=12, day=15, hour=time_steps, minute=30)
-      tou_instance = TOU(current_time=user_provided_time)
-
-      evcs.ev_state(time_steps)
-      pile_summary, total_power = evcs.get_pile_power_summary()
-      ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
-      print(time_steps, '點')
-      print(f'電網提供總功率：{gc.provide_power(user_provided_time)}')
-      # print(f"Pile Summary: {pile_summary}")
-      # print(f"Total Power: {total_power}")
-      # print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
-
 # # 模擬充電過程
-# time_steps = 24  # 代表一天的每個小時
+# for time_steps in range(24):
+#       user_provided_time = datetime(year=2023, month=12, day=15, hour=time_steps, minute=30)
+#       tou_instance = TOU(current_time=user_provided_time)
+
+#       evcs.ev_state(time_steps)
+#       pile_summary, total_power = evcs.get_pile_power_summary()
+#       ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
+#       print(time_steps, '點')
+#       print(f'電網提供總功率：{gc.provide_power(user_provided_time)}')
+#     #   print(f"Pile Summary: {pile_summary}")
+#       # print(f"Total Power: {total_power}")
+#     #   print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
+
+# 模擬充電過程
+time_steps = 24  # 代表一天的每個小時
 
 # # 調整充電結束時間至一天內的合理範圍
 # ev1.charge_start_time = 7  # 設定ev1在上午7點開始充電
 # ev2.charge_start_time = 17  # 設定ev2在下午五點開始充電
 
-# ev1.charge_end_time = min(ev1.charge_end_time, time_steps)
-# ev2.charge_end_time = min(ev2.charge_end_time, time_steps)
+ev1.charge_end_time = min(ev1.charge_end_time, time_steps)
+ev2.charge_end_time = min(ev2.charge_end_time, time_steps)
 
-# ess_battery = []
-# ev1_power = []
-# ev2_power = []
-# ev1_cumulative_soc = []
-# ev2_cumulative_soc = []
+ess_battery = []
+ev1_power = []
+ev2_power = []
+ev1_cumulative_soc = []
+ev2_cumulative_soc = []
 
-# for time_step in range(time_steps):
-#       evcs.ev_state(time_step)
+for time_step in range(time_steps):
+      user_provided_time = datetime(year=2023, month=12, day=15, hour=time_step, minute=30)
+      tou_instance = TOU(current_time=user_provided_time)
+      evcs.ev_state(time_step)
+      pile_summary, total_power = evcs.get_pile_power_summary()
+      ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
 
-#       # 計算儲能系統電量
-#       ess_battery.append(ess.get_current_battery())
+      # 計算儲能系統電量
+      ess_battery.append(ess.get_current_battery())
 
-#       # 計算每個時間步驟的SOC累積值
-#       ev1_cumulative_soc.append(ev1.now_SOC)
-#       ev2_cumulative_soc.append(ev2.now_SOC)
+      # 計算每個時間步驟的SOC累積值
+      ev1_cumulative_soc.append(ev1.now_SOC)
+      ev2_cumulative_soc.append(ev2.now_SOC)
 
-#       # 計算每個時間步驟的功率
-#       ev1_power.append(0 if time_step < ev1.charge_start_time or time_step >= ev1.charge_end_time else ev1.calculate_charge_power(
-#             evcs.pile_status[ev1.pile_number]['already_time'])[1] * ev1.battery_max_capacity)
+      # 計算每個時間步驟的功率
+      ev1_power.append(0 if time_step < ev1.charge_start_time or time_step >= ev1.charge_end_time else
+            evcs.pile_status[ev1.pile_number]['charging_power'] * ev1.battery_max_capacity)
       
-#       ev2_power.append(0 if time_step < ev2.charge_start_time or time_step >= ev2.charge_end_time else ev2.calculate_charge_power(
-#             evcs.pile_status[ev2.pile_number]['already_time'])[1] * ev2.battery_max_capacity)
+      ev2_power.append(0 if time_step < ev2.charge_start_time or time_step >= ev2.charge_end_time else
+            evcs.pile_status[ev2.pile_number]['charging_power'] * ev2.battery_max_capacity)
       
-#       print(f'ev1: {ev1_power[time_step]} /  ev2: {ev2_power[time_step]}')
 
+# 設定柱狀圖的寬度
+bar_width = 0.4
 
-# # 設定柱狀圖的寬度
-# bar_width = 0.4
+# 計算每個柱子的中心點位置
+bar_positions_center = range(1, time_steps + 1)
 
-# # 計算每個柱子的中心點位置
-# bar_positions_center = range(1, time_steps + 1)
+# 產生 x 軸的位置
+bar_positions_ev1 = [x - bar_width/2 for x in bar_positions_center]
+bar_positions_ev2 = [x + bar_width/2 for x in bar_positions_center]
 
-# # 產生 x 軸的位置
-# bar_positions_ev1 = [x - bar_width/2 for x in bar_positions_center]
-# bar_positions_ev2 = [x + bar_width/2 for x in bar_positions_center]
+# 畫出總功率柱狀圖
+plt.subplot(4, 1, 1)
+plt.bar(bar_positions_center, [x + y for x, y in zip(ev1_power, ev2_power)],
+        label='Total Power EV1 & EV2', width=bar_width, color='skyblue')
+plt.xlabel('Time Steps (Hour)')
+plt.ylabel('Total Charging Power (kW)')
+plt.title('Total Charging Power Over a Day')
+plt.legend()
 
-# # 畫出總功率柱狀圖
-# plt.subplot(4, 1, 1)
-# plt.bar(bar_positions_center, [x + y for x, y in zip(ev1_power, ev2_power)],
-#         label='Total Power EV1 & EV2', width=bar_width, color='skyblue')
-# plt.xlabel('Time Steps (Hour)')
-# plt.ylabel('Total Charging Power (kW)')
-# plt.title('Total Charging Power Over a Day')
-# plt.legend()
+# 畫出功率柱狀圖
+plt.subplot(4, 1, 2)
+plt.bar(bar_positions_ev1, ev1_power, label='EV1 Power',
+        width=bar_width, color='orange')
+plt.bar(bar_positions_ev2, ev2_power, label='EV2 Power',
+        width=bar_width, color='green', alpha=0.7)
+plt.xlabel('Time Steps (Hour)')
+plt.ylabel('EV Charging Power (kW)')
+plt.title('EV Charging Power Over a Day')
+plt.legend()
 
-# # 畫出功率柱狀圖
-# plt.subplot(4, 1, 2)
-# plt.bar(bar_positions_ev1, ev1_power, label='EV1 Power',
-#         width=bar_width, color='orange')
-# plt.bar(bar_positions_ev2, ev2_power, label='EV2 Power',
-#         width=bar_width, color='green', alpha=0.7)
-# plt.xlabel('Time Steps (Hour)')
-# plt.ylabel('EV Charging Power (kW)')
-# plt.title('EV Charging Power Over a Day')
-# plt.legend()
+# 畫出SOC累積折線圖
+plt.subplot(4, 1, 3)
+plt.plot(range(1, time_steps + 1), ev1_cumulative_soc,
+         label='EV1 Cumulative SOC')
+plt.plot(range(1, time_steps + 1), ev2_cumulative_soc,
+         label='EV2 Cumulative SOC')
+plt.xlabel('Time Steps (Hour)')
+plt.ylabel('Cumulative SOC')
+plt.title('EV Cumulative SOC Over a Day')
+plt.legend()
 
-# # 畫出SOC累積折線圖
-# plt.subplot(4, 1, 3)
-# plt.plot(range(1, time_steps + 1), ev1_cumulative_soc,
-#          label='EV1 Cumulative SOC')
-# plt.plot(range(1, time_steps + 1), ev2_cumulative_soc,
-#          label='EV2 Cumulative SOC')
-# plt.xlabel('Time Steps (Hour)')
-# plt.ylabel('Cumulative SOC')
-# plt.title('EV Cumulative SOC Over a Day')
-# plt.legend()
+# 劃出儲能系統電量折線圖
+plt.subplot(4, 1, 4)
+plt.plot(range(1, time_steps + 1), ess_battery, label='ESS Battery')    
+plt.xlabel('Time Steps (Hour)')
+plt.ylabel('ESS Battery (kWh)')
+plt.title('ESS Battery Over a Day')
+plt.legend()
 
-# # 劃出儲能系統電量折線圖
-# plt.subplot(4, 1, 4)
-# plt.plot(range(1, time_steps + 1), ess_battery, label='ESS Battery')    
-# plt.xlabel('Time Steps (Hour)')
-# plt.ylabel('ESS Battery (kWh)')
-# plt.title('ESS Battery Over a Day')
-# plt.legend()
+# 調整子圖之間的間距
+plt.tight_layout()
 
-# # 調整子圖之間的間距
-# plt.tight_layout()
-
-# # 顯示圖表
-# plt.show()
+# 顯示圖表
+plt.show()
