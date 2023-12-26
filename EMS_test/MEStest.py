@@ -71,12 +71,12 @@ class Grid:
 
         self.max_output_power = 100 * 1000  # 電網最大輸出功率
 
-    def provide_power(self, load_demand):
+    def provide_power(self, load_demand, who):
         if load_demand <= self.max_output_power:
-            print("電網各別提供功率：", load_demand)
+            print(f"電網提供給{who}功率：{load_demand}")
             return load_demand
         else:
-            print("電網各別提供功率：", self.max_output_power)
+            print(f"電網提供給{who}功率：{self.max_output_power}")
             return self.max_output_power
 
 
@@ -105,28 +105,39 @@ class ESS:
 
             self.tou = TOU()
 
-      def charge_battery(self):      # 儲能系統充電
+      def charge_battery(self, time):      # 儲能系統充電
             self.tou_state = self.tou.get_tou()[0]
             self.end_charge_time = 16 if self.tou.if_summer() else 15
 
             if self.tou_state == "尖峰":
                   print("目前是尖峰時段，儲能系統不充電。")
                   return (self.current_battery, 0, self.now_soc)
-            else:
+            elif self.tou_state == "離峰" and self.start_charge_time <= time < self.end_charge_time:
                   calculate_input_power = (self.required_charging_capacity /
                                           (self.end_charge_time - self.start_charge_time))
                   self.current_input_power = min(
-                  self.max_input_power, calculate_input_power)
+                  self.max_input_power, round(calculate_input_power, 2))
 
-            if self.current_input_power + self.current_battery <= self.battery_max_capacity:
-                  self.ess_state = 1
-                  self.current_battery += self.current_input_power
-                  self.now_soc = self.current_battery / self.battery_max_capacity
-                  # print(f"儲能系統充電，目前電量：{self.current_battery}")
-                  return (self.current_battery, self.current_input_power, self.now_soc)
+                  if self.current_input_power + self.current_battery <= self.battery_max_capacity:
+                        self.ess_state = 1
+                        print(f"儲能系統充電，目前電量：{round(self.current_battery, 2)}")
+                        self.current_battery += self.current_input_power
+                        self.now_soc = self.current_battery / self.battery_max_capacity
+                        return (self.current_battery, self.current_input_power, self.now_soc)
+                  elif self.current_input_power + self.current_battery > self.battery_max_capacity and self.current_battery < self.battery_max_capacity:
+                        self.ess_state = 1
+                        print("充電量超過儲能系統容量，只能充到滿。")
+                        self.current_input_power = self.battery_max_capacity - self.current_battery
+                        self.current_battery = self.battery_max_capacity
+                        self.now_soc = self.current_battery / self.battery_max_capacity
+                        return (self.current_battery, self.current_input_power, self.now_soc)
+                  else:
+                        self.ess_state = 0
+                        print("充電量超過儲能系統容量，無法完全充電。")
+                        return (self.current_battery, 0, self.now_soc)
             else:
                   self.ess_state = 0
-                  # print("充電量超過儲能系統容量，無法完全充電。")
+                  print("其他情況，儲能系統不充電。")
                   return (self.current_battery, 0, self.now_soc)
 
       def provide_power(self, load_demand):   # 儲能放電
@@ -163,7 +174,7 @@ class ESS:
 
 
 class GC:
-      def __init__(self):
+      def __init__(self, evcs, ess):
             # GC參數
             self.if_ess_provide_power = False
             self.if_PV_provide_power = False
@@ -176,9 +187,9 @@ class GC:
             self.grid_provide_power_for_pile = 0
             self.grid_provide_power_for_ess = 0
 
-            self.ess = ESS()
+            self.ess = ess
             self.grid = Grid()
-            self.evcs = EVCS()
+            self.evcs = evcs
 
       def provide_power(self, user_provided_time):
             self.tou = TOU(current_time=user_provided_time)
@@ -205,13 +216,13 @@ class GC:
                         self.if_ess_provide_power = False
                         self.ess_provide_power = 0
                         self.if_grid_provide_power = True
-                        self.grid_provide_power_for_pile = self.grid.provide_power(self.pile_load_demand)
+                        self.grid_provide_power_for_pile = self.grid.provide_power(self.pile_load_demand, '充電樁')
                   # return (self.grid_provide_power)
                   else:
                         self.if_ess_provide_power = False
                         self.ess_provide_power = 0
                         self.if_grid_provide_power = True
-                        self.grid_provide_power_for_pile = self.grid.provide_power(self.pile_load_demand)
+                        self.grid_provide_power_for_pile = self.grid.provide_power(self.pile_load_demand, '充電樁')
                         # return (self.ess_provide_power)
             # else:
             #     if self.charging_scheduler():
@@ -232,7 +243,7 @@ class GC:
                   self.ess_provide_power = 0
                   self.if_grid_provide_power = True
                   self.grid_provide_power_for_ess = self.grid.provide_power(
-                  self.ess.charge_battery()[1])
+                  self.ess.charge_battery(user_provided_time.hour)[1], '儲能')
 
             self.grid_provide_power = self.grid_provide_power_for_pile + self.grid_provide_power_for_ess
             return (self.grid_provide_power)
@@ -356,9 +367,9 @@ class EV:
 # tou_result = tou_instance.if_summer()
 # print(tou_result)
 
-gc = GC()
 evcs = EVCS()
 ess = ESS()
+gc = GC(evcs, ess)
 ev1 = EV(1, 0.8, 0.2, 50, 7, 11)
 evcs.add_ev(ev1)
 ev2 = EV(2, 0.9, 0.25, 60, 17, 20)
@@ -373,7 +384,7 @@ for time_steps in range(24):
       pile_summary, total_power = evcs.get_pile_power_summary()
       ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
       print(time_steps, '點')
-      print(f'電網提供功率：{gc.provide_power(user_provided_time)}')
+      print(f'電網提供總功率：{gc.provide_power(user_provided_time)}')
       # print(f"Pile Summary: {pile_summary}")
       # print(f"Total Power: {total_power}")
       # print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
