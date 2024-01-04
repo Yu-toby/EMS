@@ -157,19 +157,41 @@ class EVCS:
 
                 if ev_number1 != 0:
                     ev1 = self.find_ev_by_number(ev_number1)
-                    if ev1 and ev1.charge_start_time <= time_step < ev1.charge_end_time:
-                        check_ev_number1 = True
-                        charge_power1, charge_soc1 = ev1.calculate_charge_power(gun1['already_time'])
-                        charge_power1 = min(charge_power1, self.pile_power_limit)
-                        charge_soc1 = charge_power1 / ev1.battery_max_capacity
+                    if ev1:
+                        if ev1.charge_start_time <= ev1.charge_end_time:
+                            # 沒有跨夜充電的情況
+                            if ev1.charge_start_time <= time_step < ev1.charge_end_time:
+                                check_ev_number1 = True
+                                charge_power1, charge_soc1 = ev1.calculate_charge_power(gun1['already_time'])
+                                charge_power1 = min(charge_power1, self.pile_power_limit)
+                                charge_soc1 = charge_power1 / ev1.battery_max_capacity
+                        
+                        else:
+                            # 有跨夜充電的情況
+                            if ev1.charge_start_time <= time_step < 24 or 0 <= time_step < ev1.charge_end_time:
+                                check_ev_number1 = True
+                                charge_power1, charge_soc1 = ev1.calculate_charge_power(gun1['already_time'])
+                                charge_power1 = min(charge_power1, self.pile_power_limit)
+                                charge_soc1 = charge_power1 / ev1.battery_max_capacity
 
                 if ev_number2 != 0:
                     ev2 = self.find_ev_by_number(ev_number2)
-                    if ev2 and ev2.charge_start_time <= time_step < ev2.charge_end_time:
-                        check_ev_number2 = True
-                        charge_power2, charge_soc2 = ev2.calculate_charge_power(gun2['already_time'])
-                        charge_power2 = min(charge_power2, self.pile_power_limit)
-                        charge_soc2 = charge_power2 / ev2.battery_max_capacity
+                    if ev2:
+                        if ev2.charge_start_time <= ev2.charge_end_time:
+                            # 沒有跨夜充電的情況
+                            if ev2.charge_start_time <= time_step < ev2.charge_end_time:
+                                check_ev_number2 = True
+                                charge_power2, charge_soc2 = ev2.calculate_charge_power(gun2['already_time'])
+                                charge_power2 = min(charge_power2, self.pile_power_limit)
+                                charge_soc2 = charge_power2 / ev2.battery_max_capacity
+                        
+                        else:
+                            # 有跨夜充電的情況
+                            if ev2.charge_start_time <= time_step < 24 or 0 <= time_step < ev2.charge_end_time:
+                                check_ev_number2 = True
+                                charge_power2, charge_soc2 = ev2.calculate_charge_power(gun2['already_time'])
+                                charge_power2 = min(charge_power2, self.pile_power_limit)
+                                charge_soc2 = charge_power2 / ev2.battery_max_capacity
 
                 if (charge_power1 + charge_power2) > self.pile_power_limit:
                     # 如果兩槍的充電功率總和超過充電樁功率上限
@@ -397,7 +419,7 @@ class EV:
 
 
 evcs = EVCS()
-ev1 = EV(1, 0.8, 0.2, 60, 7, 9)
+ev1 = EV(1, 0.8, 0.2, 60, 22, 2)
 evcs.add_ev(ev1)
 ev2 = EV(2, 0.9, 0.25, 60, 8, 10)
 evcs.add_ev(ev2)
