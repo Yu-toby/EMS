@@ -124,7 +124,7 @@ class ESS:
             return (self.current_battery, 0, self.now_soc)
         elif self.tou_state == "離峰" and self.start_charge_time <= time < self.end_charge_time:
             calculate_input_power = (self.required_charging_capacity /
-                                     (self.end_charge_time - self.start_charge_time))
+                                    (self.end_charge_time - self.start_charge_time))
             self.current_input_power = min(
                 self.max_input_power, round(calculate_input_power, 2))
 

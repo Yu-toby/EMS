@@ -21,8 +21,10 @@ class TOU:
         self.current_time = current_time if current_time is not None else datetime.now()
 
     def if_summer(self):  # 判斷是否為夏季
-        summer_month = 6 <= self.current_time.month <= 9
-        return summer_month
+        if 6 <= self.current_time.month <= 9:
+            return True
+        else:
+            return False
 
     def get_tou(self):  # 取得當前時間電價
         summer_month = 6 <= self.current_time.month <= 9
@@ -49,25 +51,179 @@ class Grid:
         # 電網參數
         # self.now_tou_price = self.get_tou()[1]
 
-        self.max_output_power = 100 * 1000  # 電網最大輸出功率
+        self.max_output_power = 250 * 1000  # 電網最大輸出功率
 
-    def provide_power(self, load_demand, who):
+    def provide_power(self, load_demand):
         if load_demand <= self.max_output_power:
-            print(f"電網提供給{who}功率：{load_demand}")
+            print(f"電網提供功率：{load_demand}")
             return load_demand
         else:
-            print(f"電網提供給{who}功率：{self.max_output_power}")
+            print(f"電網提供功率：{self.max_output_power}")
             return self.max_output_power
 
 
 class ESS:
-    def __init__(self):
-        self.battery_max_capacity = 1000 * kWh
+    def __init__(self, tou):
+        self.battery_max_capacity = 1500 * kWh
+        self.battery_charge_limit = 0.9 * self.battery_max_capacity
+        self.battery_discharge_limit = 0.1 * self.battery_max_capacity
         self.current_battery = 800 * kWh
-        self.required_charging_capacity = self.battery_max_capacity - self.current_battery
+        self.required_charging_capacity = self.battery_charge_limit - self.current_battery
 
+        self.current_soc = self.current_battery / self.battery_max_capacity
+        self.target_soc = self.battery_charge_limit / self.battery_max_capacity
+
+        self.charging_capacity_per_hour = 0
+        self.discharging_capacity_per_hour = 0
+        self.discharging_time = 7
+
+        self.tou = tou
+        
         self.start_charge_time = 6      # 6點開始充電
-        self.end_charge_time = 0        # 尖峰開始時間
+        self.end_charge_time = 0       # 尖峰開始時間
+
+        self.start_discharge_time = 22  # 22點開始放電
+        self.end_discharge_time = 5    
+
+        self.ess_state = 0  # 0:不動作 1:充電 2:放電
+
+
+    def charging_battery(self, charging_power):
+        # self.tou = TOU(current_time)
+        self.tou_state = self.tou.get_tou()[0]
+        current_hour = self.tou.current_time.hour
+        self.end_charge_time = 16 if self.tou.if_summer() else 15
+
+        # 判斷電池是否可以充電
+        if self.tou_state == "尖峰":
+            #  尖峰時段不充電
+            print("目前是尖峰時段，儲能系統不充電。")
+            return (self.current_battery, self.current_soc)
+        
+        elif self.tou_state == "離峰" and self.start_charge_time <= current_hour < self.end_charge_time:
+            # 離峰時段且為充電時間
+            if self.current_battery < self.battery_charge_limit:
+                # 電池未充飽
+                self.current_battery = min(self.current_battery + charging_power, self.battery_charge_limit)
+                self.current_soc = self.current_battery / self.battery_max_capacity
+                print(f"儲能系統充電中，目前電量：{round(self.current_battery, 2)}，目前SOC：{self.current_soc}")
+                return (self.current_battery, self.current_soc)
+            else:
+                # 電池已充飽
+                print("儲能系統已充飽，不再充電。")
+                return (self.current_battery, self.current_soc)
+        else:
+            # 非充電時段
+            print("非充電時段，儲能系統不充電。")
+            return (self.current_battery, self.current_soc)
+        
+    def calculate_charge_power(self):
+        current_hour = self.tou.current_time.hour
+        print(f"當前電量：{self.current_battery}，目標電量：{self.battery_charge_limit}，充電時間：{self.end_charge_time - current_hour}小時")
+        self.charging_capacity_per_hour = (self.battery_charge_limit - self.current_battery) / (self.end_charge_time - current_hour)
+        return self.charging_capacity_per_hour
+    
+    def provide_power(self, load_demand):
+        if self.current_battery <= self.battery_discharge_limit:
+            print("電池電量不足，無法提供電力。")
+            return 0, 0, 0
+        else:
+            if load_demand <= (self.current_battery - self.battery_discharge_limit):
+                print(f"儲能系統提供電力：{load_demand}")
+                self.current_battery -= load_demand
+                self.current_soc = self.current_battery / self.battery_max_capacity
+                return self.current_battery, self.current_soc, load_demand
+            else:
+                print(f"儲能系統提供電力：{self.current_battery - self.battery_discharge_limit}")
+                self.current_battery = self.battery_discharge_limit
+                self.current_soc = self.current_battery / self.battery_max_capacity
+                return self.current_battery, self.current_soc, (self.current_battery - self.battery_discharge_limit)
+
+    def calculate_discharge_power(self):
+        current_hour = self.tou.current_time.hour
+        self.discharging_time = (self.end_discharge_time - current_hour) if self.end_discharge_time > current_hour else (24 - current_hour + self.end_discharge_time)
+        self.discharging_capacity_per_hour = (self.current_battery - self.battery_discharge_limit) / (self.discharging_time)
+        return self.discharging_capacity_per_hour
+
+    def change_ess_state(self, state):
+        if state == 'charge':
+            self.ess_state = 1
+        elif state == 'discharge':
+            self.ess_state = 2
+        elif state == 'idle':
+            self.ess_state = 0
+
+    def get_ess_inform(self):
+        return self.current_battery, self.current_soc, self.ess_state
+
+
+
+class GC:
+    def __init__(self, ess, grid, evcs, tou):
+        self.if_ess_provide_power = False
+        self.if_PV_provide_power = False
+
+        self.ess_provide_power = 0
+        self.grid_provide_power = 0
+
+        self.ess_charge_power = 0
+
+        self.grid_provide_power_for_pile = 0
+        self.grid_provide_power_for_ess = 0
+
+        self.ess = ess
+        self.grid = grid
+        self.evcs = evcs
+        self.tou = tou
+
+    def power_control_strategy(self):
+        evcs.update_ev_state_situation0(self.tou.current_time.hour)
+        self.pile_load_demand = evcs.get_pile_summary()[1]
+        self.tou_peak_hr = self.tou.get_tou()[0]
+
+        if self.tou_peak_hr == "尖峰":
+            print("目前是尖峰時段，由除能供電。")
+            self.ess.change_ess_state('discharge')
+            self.if_ess_provide_power = True
+            self.ess_provide_power = self.ess.provide_power(
+                self.pile_load_demand)[2]
+            self.if_grid_provide_power = False
+            self.grid_provide_power = 0
+            return self.ess_provide_power, self.grid_provide_power
+
+        elif self.tou_peak_hr == "離峰":
+            if self.ess_charging_schedule():    # 儲能充電時間，由電網供儲能及充電樁
+                print("目前是白天離峰時段，儲能充電時間，儲能系統充電中。")
+                self.ess.change_ess_state('charge')
+                self.if_ess_provide_power = False
+                self.ess_provide_power = 0
+                self.if_grid_provide_power = True
+                print(f"儲能系統充電功率：{self.ess.calculate_charge_power()}")
+                print(f"最大輸出 - 充電樁負載需求：{self.grid.max_output_power - self.pile_load_demand}")
+                ess_charge_power = min((self.ess.calculate_charge_power()), (self.grid.max_output_power - self.pile_load_demand))
+                self.ess.charging_battery(ess_charge_power)
+                self.grid_provide_power = self.grid.provide_power((ess_charge_power + self.pile_load_demand))
+                self.ess_provide_power = - ess_charge_power
+                return  self.ess_provide_power, self.grid_provide_power
+            
+            else:   # 非儲能充電時間，由電網及儲能供充電樁
+                print("目前是晚上離峰時段，儲能與電網共同放電。")
+                self.ess.change_ess_state('discharge')
+                self.if_ess_provide_power = True
+                self.ess_provide_power = self.ess.calculate_discharge_power() if self.pile_load_demand > 0 else 0
+                self.ess.provide_power(self.ess_provide_power)
+                self.if_grid_provide_power = True
+                self.grid_provide_power = self.grid.provide_power(
+                    self.pile_load_demand - self.ess_provide_power)
+                return  self.ess_provide_power, self.grid_provide_power
+    
+    def ess_charging_schedule(self):
+        self.ess.end_charge_time = 16 if self.tou.if_summer() else 15
+        if self.ess.start_charge_time <= self.tou.current_time.hour < self.ess.end_charge_time:
+            return True
+        else:
+            return False
+
 
 
 class EVCS:
@@ -383,6 +539,15 @@ class EVCS:
         summary_power = {ev.number: round(ev.now_power, 2) for ev in self.connected_evs}
         return summary_soc, summary_power
     
+    def get_pile_summary(self):
+        # 取得充電樁充電當下功率
+        summary_power = {}
+        for charging_pile in self.charging_piles:
+            guns = charging_pile.get('gun', [])
+            for gun in guns:
+                summary_power[gun['gun_number']] = gun['charging_power']
+                total_power = sum(summary_power.values())
+        return summary_power, total_power
 
 
 class EV:
@@ -418,19 +583,47 @@ class EV:
     
 
 
+# user_provided_time = datetime(year=2023, month=12, day=15, hour=21, minute=30)
+tou = TOU()
+ess = ESS(tou)
+grid = Grid()
 evcs = EVCS()
-ev1 = EV(1, 0.8, 0.2, 60, 22, 2)
+grid_control = GC(ess, grid, evcs, tou)
+
+ev1 = EV(1, 0.9, 0.2, 60, 22, 4)
 evcs.add_ev(ev1)
-ev2 = EV(2, 0.9, 0.25, 60, 8, 10)
+ev2 = EV(2, 0.9, 0.25, 60, 22, 4)
 evcs.add_ev(ev2)
+ev3 = EV(3, 0.8, 0.35, 60, 22, 4)
+evcs.add_ev(ev3)
+ev4 = EV(4, 0.8, 0.25, 60, 22, 4)
+evcs.add_ev(ev4)
+ev5 = EV(5, 0.9, 0.35, 60, 22, 4)
+evcs.add_ev(ev5)
+ev6 = EV(6, 0.85, 0.25, 60, 22, 4)
+evcs.add_ev(ev6)
+ev7 = EV(7, 0.8, 0.30, 60, 22, 4)
+evcs.add_ev(ev7)
+ev8 = EV(8, 0.9, 0.20, 60, 22, 4)
+evcs.add_ev(ev8)
+ev9 = EV(9, 0.88, 0.35, 60, 22, 4)
+evcs.add_ev(ev9)
+ev10 = EV(10, 0.9, 0.2, 60, 22, 4)
+evcs.add_ev(ev10)
+
+# for hr in range(0, 24):
+#     print(f"Hour {hr}")
+#     tou.current_time = datetime(year=2023, month=9, day=15, hour=hr, minute=30)
+#     grid_control.ess_charging_schedule()
 
 # # 模擬一天的充電過程
-# for hour in range(0, 24):
+# for hr in range(0, 24):
 #     # 假設每小時更新一次充電樁狀態
-#     evcs.update_ev_state_situation0(hour)
+#     tou.current_time = datetime(year=2023, month=12, day=15, hour=hr, minute=30)
+#     ess_provide, grid_provide = grid_control.power_control_strategy()
 
 #     # 提取充電樁狀態
-#     print(f"Hour {hour} Charging Pile Status:")
+#     print(f"Hour {hr} Charging Pile Status:")
 #     for charging_pile in evcs.charging_piles:
 #         pile_number = charging_pile["pile_number"]
 #         gun_1 = charging_pile["gun"][0]
@@ -441,6 +634,10 @@ evcs.add_ev(ev2)
 
 #     ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
 #     print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
+#     pile_summary, pile_total_power = evcs.get_pile_summary()
+#     print(f"Pile Summary: {pile_summary}  /  Pile Total Power: {pile_total_power}")
+
+#     print(f"ESS Provide Power: {ess_provide}  /  Grid Provide Power: {grid_provide}")
 
 #     print("\n")
 
@@ -448,20 +645,36 @@ evcs.add_ev(ev2)
 charging_pile_status = evcs.charging_piles
 
 # 設定時間步驟數量
-hours = range(0, 24)
+start_hours = 6
+hours = range(start_hours, start_hours + 24)
 
 # 建立一個字典來存儲每小時每個充電樁的充電功率
 charging_power_data = {}
 ev1_soc_data = []
 ev2_soc_data = []
+ev3_soc_data = []
+ev4_soc_data = []
+ev5_soc_data = []
+ev6_soc_data = []
+ev7_soc_data = []
+ev8_soc_data = []
+ev9_soc_data = []
+ev10_soc_data = []
+ess_charge_discharge = []
+ess_soc = []
+grid = []
+
 for pile in charging_pile_status:
     pile_number = pile['pile_number']
     charging_power_data[f"Pile {pile_number} Gun 1"] = []
     charging_power_data[f"Pile {pile_number} Gun 2"] = []
 
 # 逐小時提取充電功率
-for hour in hours:
-    evcs.update_ev_state_situation0(hour)
+for hr1 in hours:
+    hr = hr1 % 24
+    tou.current_time = datetime(year=2023, month=12, day=15, hour=hr, minute=30)
+    ess_provide, grid_provide = grid_control.power_control_strategy()
+    print(f"Hour {hr}")
     for idx, charging_pile in enumerate(charging_pile_status):
         gun_1_power = charging_pile["gun"][0]["charging_power"]
         gun_2_power = charging_pile["gun"][1]["charging_power"]
@@ -471,12 +684,30 @@ for hour in hours:
         charging_power_data[f"Pile {pile_number} Gun 2"].append(gun_2_power)
     ev1_soc_data.append(ev1.now_SOC)
     ev2_soc_data.append(ev2.now_SOC)
+    ev3_soc_data.append(ev3.now_SOC)
+    ev4_soc_data.append(ev4.now_SOC)
+    ev5_soc_data.append(ev5.now_SOC)
+    ev6_soc_data.append(ev6.now_SOC)
+    ev7_soc_data.append(ev7.now_SOC)
+    ev8_soc_data.append(ev8.now_SOC)
+    ev9_soc_data.append(ev9.now_SOC)
+    ev10_soc_data.append(ev10.now_SOC)
 
+    ess_charge_discharge.append(ess_provide)
+    ess_soc.append(ess.current_soc)
+    grid.append(grid_provide)
+
+    print(f"ESS Provide Power: {ess_provide}  /  Grid Provide Power: {grid_provide}")
+    print("\n")
+
+time_steps = list(range(6, 24)) + list(range(0, 6))
+
+plt.figure(1)
 # 繪製柱狀圖
 plt.subplot(2, 1, 1)
 # plt.figure(figsize=(12, 6))
 for pile, powers in charging_power_data.items():
-    plt.bar(hours, powers, label=pile, alpha=0.7)
+    plt.bar(time_steps, powers, label=pile, alpha=0.7)
 # 添加標題與標籤
 plt.title('EV Charging Power Over a Day')
 plt.xlabel('Time Steps (Hour)')
@@ -488,6 +719,9 @@ plt.legend()
 plt.subplot(2, 1, 2)
 plt.plot(hours, ev1_soc_data, label='EV1 SOC')
 plt.plot(hours, ev2_soc_data, label='EV2 SOC')
+plt.plot(hours, ev3_soc_data, label='EV3 SOC')
+plt.plot(hours, ev4_soc_data, label='EV4 SOC')
+plt.plot(hours, ev5_soc_data, label='EV5 SOC')
 # 添加標題與標籤
 plt.title('EV SOC Over a Day')
 plt.xlabel('Time Steps (Hour)')
@@ -495,9 +729,37 @@ plt.ylabel('EV SOC')
 # 添加圖例
 plt.legend()
 
+# 調整子圖之間的間距
+plt.tight_layout()
+# =============================================================================
+plt.figure(2)
+# 繪製儲能每小時充放電功率柱狀圖
+plt.subplot(3, 1, 1)
+plt.bar(hours, ess_charge_discharge, label='ESS Charge/Discharge Power', alpha=0.7)
+plt.title('ESS Charge/Discharge Power Over a Day')
+plt.xlabel('Time Steps (Hour)')
+plt.ylabel('ESS Charge/Discharge Power (kW)')
+plt.legend()
+
+# 繪製儲能SOC累積折線圖
+plt.subplot(3, 1, 2)
+plt.plot(hours, ess_soc, label='ESS SOC')
+plt.title('ESS SOC Over a Day')
+plt.xlabel('Time Steps (Hour)')
+plt.ylabel('ESS SOC')
+plt.legend()
+
+# 繪製電網每小時供電功率柱狀圖
+plt.subplot(3, 1, 3)
+plt.bar(hours, grid, label='Grid Provide Power', alpha=0.7)
+plt.title('Grid Provide Power Over a Day')
+plt.xlabel('Time Steps (Hour)')
+plt.ylabel('Grid Provide Power (kW)')
+plt.legend()
 
 # 調整子圖之間的間距
 plt.tight_layout()
+
 # 顯示圖表
 plt.show()
 
