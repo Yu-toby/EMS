@@ -55,10 +55,10 @@ class Grid:
 
     def provide_power(self, load_demand):
         if load_demand <= self.max_output_power:
-            print(f"電網提供功率：{load_demand}")
+            # print(f"電網提供功率：{load_demand}")
             return load_demand
         else:
-            print(f"電網提供功率：{self.max_output_power}")
+            # print(f"電網提供功率：{self.max_output_power}")
             return self.max_output_power
 
 
@@ -199,7 +199,6 @@ class GC:
                 self.ess_provide_power = 0
                 self.if_grid_provide_power = True
                 print(f"儲能系統充電功率：{self.ess.calculate_charge_power()}")
-                print(f"最大輸出 - 充電樁負載需求：{self.grid.max_output_power - self.pile_load_demand}")
                 ess_charge_power = min((self.ess.calculate_charge_power()), (self.grid.max_output_power - self.pile_load_demand))
                 self.ess.charging_battery(ess_charge_power)
                 self.grid_provide_power = self.grid.provide_power((ess_charge_power + self.pile_load_demand))
@@ -590,25 +589,25 @@ grid = Grid()
 evcs = EVCS()
 grid_control = GC(ess, grid, evcs, tou)
 
-ev1 = EV(1, 0.9, 0.2, 60, 22, 4)
+ev1 = EV(1, 0.9, 0.2, 60, 22, 5)
 evcs.add_ev(ev1)
-ev2 = EV(2, 0.9, 0.25, 60, 22, 4)
+ev2 = EV(2, 0.9, 0.25, 60, 22, 5)
 evcs.add_ev(ev2)
-ev3 = EV(3, 0.8, 0.35, 60, 22, 4)
+ev3 = EV(3, 0.8, 0.35, 60, 22, 5)
 evcs.add_ev(ev3)
-ev4 = EV(4, 0.8, 0.25, 60, 22, 4)
+ev4 = EV(4, 0.8, 0.25, 60, 22, 5)
 evcs.add_ev(ev4)
-ev5 = EV(5, 0.9, 0.35, 60, 22, 4)
+ev5 = EV(5, 0.9, 0.35, 60, 22, 5)
 evcs.add_ev(ev5)
-ev6 = EV(6, 0.85, 0.25, 60, 22, 4)
+ev6 = EV(6, 0.85, 0.25, 60, 22, 5)
 evcs.add_ev(ev6)
-ev7 = EV(7, 0.8, 0.30, 60, 22, 4)
+ev7 = EV(7, 0.8, 0.30, 60, 22, 5)
 evcs.add_ev(ev7)
-ev8 = EV(8, 0.9, 0.20, 60, 22, 4)
+ev8 = EV(8, 0.9, 0.20, 60, 22, 5)
 evcs.add_ev(ev8)
-ev9 = EV(9, 0.88, 0.35, 60, 22, 4)
+ev9 = EV(9, 0.88, 0.35, 60, 22, 5)
 evcs.add_ev(ev9)
-ev10 = EV(10, 0.9, 0.2, 60, 22, 4)
+ev10 = EV(10, 0.9, 0.2, 60, 22, 5)
 evcs.add_ev(ev10)
 
 # for hr in range(0, 24):
@@ -682,6 +681,10 @@ for hr1 in hours:
         pile_number = charging_pile["pile_number"]
         charging_power_data[f"Pile {pile_number} Gun 1"].append(gun_1_power)
         charging_power_data[f"Pile {pile_number} Gun 2"].append(gun_2_power)
+
+    pile_summary, pile_total_power = evcs.get_pile_summary()
+    print(f"Pile Summary: {pile_summary}  /  Pile Total Power: {pile_total_power}")
+    
     ev1_soc_data.append(ev1.now_SOC)
     ev2_soc_data.append(ev2.now_SOC)
     ev3_soc_data.append(ev3.now_SOC)
@@ -722,6 +725,11 @@ plt.plot(hours, ev2_soc_data, label='EV2 SOC')
 plt.plot(hours, ev3_soc_data, label='EV3 SOC')
 plt.plot(hours, ev4_soc_data, label='EV4 SOC')
 plt.plot(hours, ev5_soc_data, label='EV5 SOC')
+plt.plot(hours, ev6_soc_data, label='EV6 SOC')
+plt.plot(hours, ev7_soc_data, label='EV7 SOC')
+plt.plot(hours, ev8_soc_data, label='EV8 SOC')
+plt.plot(hours, ev9_soc_data, label='EV9 SOC')
+plt.plot(hours, ev10_soc_data, label='EV10 SOC')
 # 添加標題與標籤
 plt.title('EV SOC Over a Day')
 plt.xlabel('Time Steps (Hour)')
