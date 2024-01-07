@@ -703,18 +703,18 @@ for hr1 in hours:
     print(f"ESS Provide Power: {ess_provide}  /  Grid Provide Power: {grid_provide}")
     print("\n")
 
-time_steps = list(range(6, 24)) + list(range(0, 6))
-
 plt.figure(1)
 # 繪製柱狀圖
 plt.subplot(2, 1, 1)
 # plt.figure(figsize=(12, 6))
 for pile, powers in charging_power_data.items():
-    plt.bar(time_steps, powers, label=pile, alpha=0.7)
+    plt.bar(hours, powers, label=pile, alpha=0.7)
 # 添加標題與標籤
 plt.title('EV Charging Power Over a Day')
 plt.xlabel('Time Steps (Hour)')
 plt.ylabel('EV Charging Power (kW)')
+# 設定 X 軸刻度標籤
+plt.xticks(np.arange(0, 24 * 2, 1), [(hr) % 24 for hr in range(24 * 2)])
 # 添加圖例
 plt.legend()
 
@@ -734,6 +734,8 @@ plt.plot(hours, ev10_soc_data, label='EV10 SOC')
 plt.title('EV SOC Over a Day')
 plt.xlabel('Time Steps (Hour)')
 plt.ylabel('EV SOC')
+# 設定 X 軸刻度標籤
+plt.xticks(np.arange(0, 24 * 2, 1), [(hr) % 24 for hr in range(24 * 2)])
 # 添加圖例
 plt.legend()
 
@@ -747,6 +749,8 @@ plt.bar(hours, ess_charge_discharge, label='ESS Charge/Discharge Power', alpha=0
 plt.title('ESS Charge/Discharge Power Over a Day')
 plt.xlabel('Time Steps (Hour)')
 plt.ylabel('ESS Charge/Discharge Power (kW)')
+# 設定 X 軸刻度標籤
+plt.xticks(np.arange(0, 24 * 2, 1), [(hr) % 24 for hr in range(24 * 2)])
 plt.legend()
 
 # 繪製儲能SOC累積折線圖
@@ -755,6 +759,8 @@ plt.plot(hours, ess_soc, label='ESS SOC')
 plt.title('ESS SOC Over a Day')
 plt.xlabel('Time Steps (Hour)')
 plt.ylabel('ESS SOC')
+# 設定 X 軸刻度標籤
+plt.xticks(np.arange(0, 24 * 2, 1), [(hr) % 24 for hr in range(24 * 2)])
 plt.legend()
 
 # 繪製電網每小時供電功率柱狀圖
@@ -763,6 +769,8 @@ plt.bar(hours, grid, label='Grid Provide Power', alpha=0.7)
 plt.title('Grid Provide Power Over a Day')
 plt.xlabel('Time Steps (Hour)')
 plt.ylabel('Grid Provide Power (kW)')
+# 設定 X 軸刻度標籤
+plt.xticks(np.arange(0, 24 * 2, 1), [(hr) % 24 for hr in range(24 * 2)])
 plt.legend()
 
 # 調整子圖之間的間距
