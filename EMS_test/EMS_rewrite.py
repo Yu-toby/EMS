@@ -67,7 +67,7 @@ class ESS:
         self.battery_max_capacity = 1500 * kWh
         self.battery_charge_limit = 0.9 * self.battery_max_capacity
         self.battery_discharge_limit = 0.1 * self.battery_max_capacity
-        self.current_battery = 280 * kWh
+        self.current_battery = 380 * kWh
         self.required_charging_capacity = self.battery_charge_limit - self.current_battery
 
         self.current_soc = self.current_battery / self.battery_max_capacity
@@ -171,7 +171,7 @@ class GC:
         self.night_grid_provide_total_power = 0
         self.daytime_grid_provide_total_power = 0
 
-        self.grid_provide_power_factor = 0.9    # 電網供電功率修正係數
+        self.grid_provide_power_factor = 1    # 電網供電功率修正係數
 
         self.ess = ess
         self.grid = grid
@@ -234,6 +234,7 @@ class EVCS:
     def __init__(self):
         self.pile_power_limit = 100 * 1000
         self.connected_evs = []
+        self.ev_list = []
         piles_amount = 5
         self.charging_piles = []
         self.gun1_empty = True
@@ -258,6 +259,16 @@ class EVCS:
 
             self.charging_piles.append(charging_pile)
 
+    
+    def add_to_ev_list(self, ev):
+        self.ev_list.append(ev)
+        self.evs_inform = {ev.number: [ev.charge_start_time, 
+                                    ev.charge_end_time, 
+                                    ev.target_SOC, 
+                                    ev.now_SOC,
+                                    ev.now_power,
+                                    ev.charge_time] for ev in self.ev_list}
+        return self.evs_inform
 
     def add_ev(self, ev):
         # 逐一搜尋 charging_piles 集合中的每一個 charging_pile
@@ -355,7 +366,7 @@ class EVCS:
                     self.gun2_empty = False
                     ev2 = self.find_ev_by_number(ev_number2)
                     if ev2:
-                        if check_ev_number2 and (ev2.now_SOC == ev2.target_SOC):
+                        if (ev2.now_SOC == ev2.target_SOC):
                             # 充完電就離開
                             self.delete_ev(ev2)
                             check_ev_number2 = False
@@ -634,26 +645,62 @@ evcs = EVCS()
 grid_control = GC(ess, grid, evcs, tou)
 
 # 模擬夜間充電
+# ev1 = EV(1, 0.9, 0.2, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev2 = EV(2, 0.9, 0.25, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev3 = EV(3, 0.8, 0.35, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev4 = EV(4, 0.8, 0.25, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev5 = EV(5, 0.9, 0.35, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev6 = EV(6, 0.85, 0.25, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev7 = EV(7, 0.8, 0.30, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev8 = EV(8, 0.9, 0.20, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev9 = EV(9, 0.9, 0.3, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# ev10 = EV(10, 0.8, 0.4, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
 ev1 = EV(1, 0.9, 0.2, 60, 22, 5)
-evcs.add_ev(ev1)
 ev2 = EV(2, 0.9, 0.25, 60, 22, 5)
-evcs.add_ev(ev2)
 ev3 = EV(3, 0.8, 0.35, 60, 22, 5)
-evcs.add_ev(ev3)
 ev4 = EV(4, 0.8, 0.25, 60, 22, 5)
-evcs.add_ev(ev4)
 ev5 = EV(5, 0.9, 0.35, 60, 22, 5)
-evcs.add_ev(ev5)
 ev6 = EV(6, 0.85, 0.25, 60, 22, 5)
-evcs.add_ev(ev6)
 ev7 = EV(7, 0.8, 0.30, 60, 22, 5)
-evcs.add_ev(ev7)
 ev8 = EV(8, 0.9, 0.20, 60, 22, 5)
-evcs.add_ev(ev8)
 ev9 = EV(9, 0.9, 0.3, 60, 22, 5)
-evcs.add_ev(ev9)
 ev10 = EV(10, 0.8, 0.4, 60, 22, 5)
+evcs.add_ev(ev1)
+evcs.add_ev(ev2)
+evcs.add_ev(ev3)
+evcs.add_ev(ev4)
+evcs.add_ev(ev5)
+evcs.add_ev(ev6)
+evcs.add_ev(ev7)
+evcs.add_ev(ev8)
+evcs.add_ev(ev9)
 evcs.add_ev(ev10)
+
+
+
+# evcs.add_to_ev_list(ev1)
+# evcs.add_to_ev_list(ev2)
+# evcs.add_to_ev_list(ev3)
+# evcs.add_to_ev_list(ev4)
+# evcs.add_to_ev_list(ev5)
+# evcs.add_to_ev_list(ev6)
+# evcs.add_to_ev_list(ev7)
+# evcs.add_to_ev_list(ev8)
+# evcs.add_to_ev_list(ev9)
+# evcs.add_to_ev_list(ev10)
+# print(f"EV List: {evcs.evs_inform}")
+
+# # 設定時間步驟數量
+# start_hours = 6
+# hours = range(start_hours, start_hours + 48)
+
+# # 模擬一天的充電過程
+# for hr1 in hours:
+#     hr = hr1 % 24
+#     # 假設每小時更新一次充電樁狀態
+#     tou.current_time = datetime(year=2023, month=12, day=15, hour=hr, minute=30)
+
+    # ess_provide, grid_provide = grid_control.power_control_strategy()
 
 # 模擬白天充電
 # ev11 = EV(11, 0.9, 0.2, 60, 6, 8)
@@ -759,6 +806,8 @@ for hr1 in hours:
         charging_power_data[f"Pile {pile_number} Gun 1"].append(gun_1_power)
         charging_power_data[f"Pile {pile_number} Gun 2"].append(gun_2_power)
 
+    ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
+    print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
     pile_summary, pile_total_power = evcs.get_pile_summary()
     print(f"Pile Summary: {pile_summary}  /  Pile Total Power: {pile_total_power}")
     
@@ -783,6 +832,7 @@ for hr1 in hours:
     ess_soc.append(ess.current_soc)
     grid.append(grid_provide)
 
+    
     print(f"ESS Provide Power: {ess_provide}  /  Grid Provide Power: {grid_provide}")
     print("\n")
 
