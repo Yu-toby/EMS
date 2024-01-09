@@ -1,6 +1,8 @@
 from datetime import datetime, timedelta
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
+import os
 
 kWh = 1000  # 1kWh = 1000度電
 
@@ -338,7 +340,7 @@ evcs.add_to_ev_list(ev2)
 evcs.add_to_ev_list(ev3)
 evcs.add_to_ev_list(ev4)
 
-# time = datetime(2023, 12, 15, 6, 0)
+time = datetime(2023, 12, 15, 0, 0)
 
 # while time < datetime(2023, 12, 16, 23, 0):
 #     tou.current_time = time
@@ -385,6 +387,9 @@ ev7_soc_data = []
 ev8_soc_data = []
 ev9_soc_data = []
 ev10_soc_data = []
+
+time_list = []
+piles_total_power = []
 ess_charge_discharge = []
 ess_soc = []
 grid = []
@@ -394,9 +399,7 @@ for pile in charging_pile_status:
     charging_power_data[f"Pile {pile_number} Gun 1"] = []
     charging_power_data[f"Pile {pile_number} Gun 2"] = []
 
-time = datetime(2023, 12, 15, 0, 0)
-
-while time < datetime(2023, 12, 16, 23, 0):
+while time < datetime(2023, 12, 17, 0, 0):
     tou.current_time = time
     for ev in evcs.ev_list:
         if ev.charge_start_time == time:
@@ -417,6 +420,8 @@ while time < datetime(2023, 12, 16, 23, 0):
     pile_summary, pile_total_power = evcs.get_pile_summary()
     print(f"Pile Summary: {pile_summary}  /  Pile Total Power: {pile_total_power}")
     
+    time_list.append(time)
+    piles_total_power.append(pile_total_power)
     ev1_soc_data.append(ev1.now_SOC)
     ev2_soc_data.append(ev2.now_SOC)
     ev3_soc_data.append(ev3.now_SOC)
@@ -432,6 +437,52 @@ while time < datetime(2023, 12, 16, 23, 0):
 
     time += timedelta(hours=1)
 
+# =============================================================================
+# 將數據保存到Excel文件
+# 將充電功率和SOC數據轉換為pandas DataFrame
+charging_power_df = pd.DataFrame(charging_power_data)
+pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
+ev_soc_df = pd.DataFrame({
+    'EV1 SOC': ev1_soc_data,
+    'EV2 SOC': ev2_soc_data,
+    'EV3 SOC': ev3_soc_data,
+    'EV4 SOC': ev4_soc_data,
+    # 'EV5 SOC': ev5_soc_data,
+    # 'EV6 SOC': ev6_soc_data,
+    # 'EV7 SOC': ev7_soc_data,
+    # 'EV8 SOC': ev8_soc_data,
+    # 'EV9 SOC': ev9_soc_data,
+    # 'EV10 SOC': ev10_soc_data,
+})
+
+# 將時間信息添加到 DataFrame 的第一行
+charging_power_df.insert(0, 'Time', time_list)
+pile_total_power_df.insert(0, 'Time', time_list)
+ev_soc_df.insert(0, 'Time', time_list)
+
+# 獲取腳本所在目錄的絕對路徑
+script_directory = os.path.dirname(os.path.abspath(__file__))
+
+# 獲取當前日期和時間
+current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# 構建Excel文件的完整路徑，以日期和時間命名
+excel_file_path = os.path.join(script_directory, "output_result_data", f"data_{current_datetime}.xlsx")
+
+# 如果 "output_result_data" 資料夾不存在，則創建它
+output_folder = os.path.join(script_directory, "output_result_data")
+os.makedirs(output_folder, exist_ok=True)
+
+# 將數據保存到Excel文件
+with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+    charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
+    pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
+    ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
+
+print("Excel檔案已成功生成：charging_data.xlsx")
+
+# =============================================================================
+# 繪製圖表
 days = 2
 x_ticks_positions = np.arange(0, 24 * days, 1)
 x_ticks_labels = [(hr) % 24 for hr in range(24 * days)]
@@ -479,5 +530,5 @@ plt.legend()
 plt.tight_layout()
 
 # 顯示圖表
-plt.show()
+# plt.show()
 
