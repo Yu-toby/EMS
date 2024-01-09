@@ -432,8 +432,9 @@ while time < datetime(2023, 12, 16, 23, 0):
 
     time += timedelta(hours=1)
 
-x_ticks_positions = np.arange(0, 24 * 2, 1)
-x_ticks_labels = [(hr) % 24 for hr in range(24 * 2)]
+days = 2
+x_ticks_positions = np.arange(0, 24 * days, 1)
+x_ticks_labels = [(hr) % 24 for hr in range(24 * days)]
 
 # 將時間步數轉換為小時
 hours = np.arange(0, len(ev1_soc_data), 1)
