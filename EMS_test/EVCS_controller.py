@@ -5,6 +5,7 @@ import pandas as pd
 import os
 
 kWh = 1000  # 1kWh = 1000度電
+time_cycle = 3600  # 時間間隔為1小時
 
 class TOU:
     def __init__(self, current_time=None):
@@ -86,26 +87,28 @@ class EVCS:
 
     def add_ev(self, ev):
         # 逐一搜尋 charging_piles 集合中的每一個 charging_pile
-        for charging_pile in self.charging_piles:
-            guns = charging_pile.get('gun', [])
+        for num in range(2):
+            for charging_pile in self.charging_piles:
+                guns = charging_pile.get('gun', [])
 
-            # 逐一檢查每個 gun 的 ev_number
-            for gun in guns:
-                if gun['ev_number'] == 0:
+                if guns[num]['ev_number'] == 0:
                     # 如果 ev_number 為空，則填入要添加的 EV 資料
-                    gun['ev_number'] = ev.number
-                    gun['charging_power'] = 0  # 預設充電功率
-                    gun['start_time'] = ev.charge_start_time
-                    gun['end_time'] = ev.charge_end_time
-                    gun['check_charging'] = False  # 預設未充電
+                    guns[num]['ev_number'] = ev.number
+                    guns[num]['charging_power'] = 0  # 預設充電功率
+                    guns[num]['start_time'] = ev.charge_start_time
+                    guns[num]['end_time'] = ev.charge_end_time
+                    guns[num]['check_charging'] = False  # 預設未充電
                     self.connected_evs.append(ev)
                     return  # 結束函式，已找到並填入 EV 資料
-
-                elif gun['ev_number'] == ev.number:
+                
+                elif guns[num]['ev_number'] == ev.number:
                     print('該車編號已存在，請確認是否有誤')
-                    return  # 結束函式，已找到重複的 EV 資料
-
-        print('找不到可用的充電槍，請檢查充電樁狀態')
+                    return
+                
+                else:
+                    continue
+            
+            print('找不到可用的充電槍，請檢查充電樁狀態')            
 
     def delete_ev(self, ev):
         # 逐一搜尋 charging_piles 集合中的每一個 charging_pile
@@ -284,7 +287,6 @@ class EV:
         self.charge_end_time = charge_end_time
         
         self.now_power = now_SOC * self.battery_max_capacity
-        self.time_step = 3600  # 時間間隔為1小時
         self.pile_number = None  # 車輛連接的充電樁編號
 
         self.charge_time = (self.charge_end_time - self.charge_start_time) if \
@@ -295,7 +297,7 @@ class EV:
     def calculate_charge_power(self, time):
         # 計算每小時所需充電功率
         if self.charge_start_time <= time < self.charge_end_time:
-            charge_soc = (self.target_SOC - self.now_SOC) / ((self.charge_end_time - time).total_seconds() / self.time_step)
+            charge_soc = (self.target_SOC - self.now_SOC) / ((self.charge_end_time - time).total_seconds() / time_cycle)
             charge_power = charge_soc * self.battery_max_capacity
         else:
             charge_power = 0
@@ -330,15 +332,19 @@ evcs = EVCS()
 # evcs.add_to_ev_list(ev9)
 # evcs.add_to_ev_list(ev10)
 
-ev1 = EV(1, 0.9, 0.2, 60, datetime(2023, 12, 15, 6, 0), datetime(2023, 12, 15, 9, 0))
-ev2 = EV(2, 0.9, 0.25, 60, datetime(2023, 12, 15, 7, 0), datetime(2023, 12, 15, 10, 0))
-ev3 = EV(3, 0.8, 0.35, 60, datetime(2023, 12, 15, 11, 0), datetime(2023, 12, 15, 13, 0))
-ev4 = EV(4, 0.8, 0.25, 60, datetime(2023, 12, 15, 12, 0), datetime(2023, 12, 15, 13, 0))
+ev1 = EV(1, 0.9, 0.2, 60, datetime(2023, 12, 15, 6, 0), datetime(2023, 12, 15, 13, 0))
+ev2 = EV(2, 0.9, 0.25, 60, datetime(2023, 12, 15, 7, 0), datetime(2023, 12, 15, 13, 0))
+ev3 = EV(3, 0.8, 0.35, 60, datetime(2023, 12, 15, 8, 0), datetime(2023, 12, 15, 13, 0))
+ev4 = EV(4, 0.8, 0.25, 60, datetime(2023, 12, 15, 9, 0), datetime(2023, 12, 15, 13, 0))
+ev5 = EV(5, 0.9, 0.35, 60, datetime(2023, 12, 15, 10, 0), datetime(2023, 12, 15, 13, 0))
+ev6 = EV(6, 0.85, 0.25, 60, datetime(2023, 12, 15, 11, 0), datetime(2023, 12, 15, 13, 0))
 
 evcs.add_to_ev_list(ev1)
 evcs.add_to_ev_list(ev2)
 evcs.add_to_ev_list(ev3)
 evcs.add_to_ev_list(ev4)
+evcs.add_to_ev_list(ev5)
+evcs.add_to_ev_list(ev6)
 
 time = datetime(2023, 12, 15, 0, 0)
 
@@ -530,5 +536,5 @@ plt.legend()
 plt.tight_layout()
 
 # 顯示圖表
-# plt.show()
+plt.show()
 
