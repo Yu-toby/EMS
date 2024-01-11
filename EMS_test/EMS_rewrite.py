@@ -2,7 +2,7 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
-kWh = 1000  # 1kWh = 1000度電
+kWh = 1000  # 1kWh = 1度電
 
 class TOU:
     def __init__(self, current_time=None):
