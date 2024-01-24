@@ -398,14 +398,15 @@ for pile in charging_pile_status:
     charging_power_data[f"Pile {pile_number} Gun 1"] = []
     charging_power_data[f"Pile {pile_number} Gun 2"] = []
 
-while time < datetime(2024, 2, 7, 0, 0):
+while time < datetime(2024, 1, 26, 0, 0):
     tou.current_time = time
     for ev in evcs.ev_list:
         if ev.charge_start_time <= time:
             evcs.add_ev(ev)
+            evcs.delete_from_ev_list(ev)
     evcs.update_ev_state_situation0(time)
 
-    print(f"Hour {time.hour}")
+    print(f"Time {time}")
     for idx, charging_pile in enumerate(charging_pile_status):
         gun_1_power = charging_pile["gun"][0]["charging_power"]
         gun_2_power = charging_pile["gun"][1]["charging_power"]
@@ -436,7 +437,7 @@ while time < datetime(2024, 2, 7, 0, 0):
     
     print("\n")
 
-    time += timedelta(hours=1)
+    time += timedelta(seconds=time_cycle)
 
 # =============================================================================
 # # 將數據保存到Excel文件
