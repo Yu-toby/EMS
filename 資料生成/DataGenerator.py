@@ -209,9 +209,9 @@ def plot_kdeplot(data, original_data):
 os.system("cls")
 
 # Parameter setting
-number_of_generation = 14   #數據生成天數
+number_of_generation = 1   #數據生成天數
 min_records = 10    # 一天最少充電次數
-max_records = 25    # 一天最多充電次數 maximun = 30
+max_records = 11    # 一天最多充電次數 maximun = 30
 soc_end_inf = 90    # 結束SoC下限
 soc_end_sup = 95    # 結束SoC上限
 

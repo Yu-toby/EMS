@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -275,12 +276,14 @@ class GC:
                 self.ess_provide_power = load_demand - self.grid_provide_power if (load_demand > self.grid_provide_power) else 0
                 
                 if (ess.current_battery - ess.battery_discharge_limit) >= self.ess_provide_power:
+                    print("儲能系統提供電力沒變。")
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess.discharging_battery(self.ess_provide_power)
                     return  self.ess_provide_power, self.grid_provide_power
                 
                 else:
-                    self.ess_provide_power = ess.current_battery
+                    print("儲能系統提供電力有變。")
+                    self.ess_provide_power = ess.current_battery - ess.battery_discharge_limit
                     self.grid_provide_power = load_demand - self.ess_provide_power
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess.discharging_battery(self.ess_provide_power)
@@ -307,6 +310,7 @@ gc = GC(ess, grid, None, tou)
 # 儲存數據的列表
 time_list = []
 ess_provide_power_list = []
+ess_soc_list = []
 grid_provide_power_list = []
 load_list = []
 
@@ -326,21 +330,23 @@ while time < datetime(2023, 6, 1, 22, 0, 0):
     # discharge_power = ess.calculate_discharge_power()
     # ess.discharging_battery(discharge_power)
 
+    print(f"儲能SOC：{ess.current_soc}")
+    print(f"儲能當前電量：{ess.current_battery}")
     ess_provide_power, grid_provide_power = gc.power_control_strategy(load[num])
     # print(f"儲能開始充電時間：{ess.start_charge_time}")
     # print(f"儲能結束充電時間：{ess.end_charge_time}")
     # print(f"儲能開始放電時間：{ess.start_discharge_time}")
     # print(f"儲能結束放電時間：{ess.end_discharge_time}")
-    print(f"儲能SOC：{ess.current_soc}")
-    print(f"儲能當前電量：{ess.current_battery}")
     print(f"儲能系統提供功率：{ess_provide_power}")
     print(f"電網提供功率：{grid_provide_power}")
+    print(f"儲能提供後SOC：{ess.current_soc}")
+    print(f"儲能提供後電量：{ess.current_battery}")
     print("\n")
 
     # 紀錄數據
     time_list.append(time)
-    ess_provide_power, grid_provide_power = gc.power_control_strategy(load[num])
     ess_provide_power_list.append(ess_provide_power)
+    ess_soc_list.append(ess.current_soc)
     grid_provide_power_list.append(grid_provide_power)
     load_list.append(load[num])
 
@@ -353,24 +359,26 @@ df = pd.DataFrame({
     'Time': time_list,
     'ESS Provide Power': ess_provide_power_list,
     'Grid Provide Power': grid_provide_power_list,
-    'Load': load_list
+    'Load': load_list,
+    'ESS SOC': ess_soc_list
 })
 
 # 使用 Plotly 繪製圖表
-fig = go.Figure()
+fig = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=['Power Over Time', 'ESS SOC Over Time'])
 
 # 添加 ESS 提供功率、電網提供功率、負載的柱狀圖
-fig.add_trace(go.Bar(x=df['Time'], y=df['ESS Provide Power'], name='ESS Provide Power'))
-fig.add_trace(go.Bar(x=df['Time'], y=df['Grid Provide Power'], name='Grid Provide Power'))
-fig.add_trace(go.Bar(x=df['Time'], y=df['Load'], name='Load'))
+fig.add_trace(go.Bar(x=df['Time'], y=df['ESS Provide Power'], name='ESS Provide Power'), row=1, col=1)
+fig.add_trace(go.Bar(x=df['Time'], y=df['Grid Provide Power'], name='Grid Provide Power'), row=1, col=1)
+fig.add_trace(go.Bar(x=df['Time'], y=df['Load'], name='Load'), row=1, col=1)
+
+# 添加 ESS SOC 的折線圖
+fig.add_trace(go.Scatter(x=df['Time'], y=df['ESS SOC'], name='ESS SOC', line=dict(color='firebrick', width=2, dash='solid')), row=2, col=1)
 
 # 設定布局
 fig.update_layout(title_text='Power and Load Over Time',
-                  xaxis_title='Time',
-                  yaxis_title='Power (kW)',
-                  barmode='group',  # 將柱子堆疊在一起
-                  showlegend=True,
-                  bargap=0.5)
+                    xaxis_title='Time',
+                    showlegend=True,
+                    bargap=0.5)
 
 # 顯示圖表
 fig.show()

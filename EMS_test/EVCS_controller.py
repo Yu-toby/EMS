@@ -7,7 +7,7 @@ import pandas as pd
 import os
 
 kWh = 1000  # 1kWh = 1000度電
-time_cycle = 3600  # 時間間隔為1小時
+time_cycle = 3600/4  # 時間間隔為1小時
 
 class TOU:
     def __init__(self, current_time=None):
@@ -309,44 +309,37 @@ class EV:
 tou = TOU()
 evcs = EVCS()
 
-# # 模擬夜間充電
-# ev1 = EV(1, 0.9, 0.2, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev2 = EV(2, 0.9, 0.25, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev3 = EV(3, 0.8, 0.35, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev4 = EV(4, 0.8, 0.25, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev5 = EV(5, 0.9, 0.35, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev6 = EV(6, 0.85, 0.25, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev7 = EV(7, 0.8, 0.30, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev8 = EV(8, 0.9, 0.20, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev9 = EV(9, 0.9, 0.3, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
-# ev10 = EV(10, 0.8, 0.4, 60, datetime(2023, 12, 15, 22, 0), datetime(2023, 12, 16, 5, 0))
+# 讀取包含 EV 初始資料的 Excel 文件
+excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\資料生成\生成數據\generated_data.xlsx"  
+ev_data_df = pd.read_excel(excel_file_path, sheet_name='Sheet1')
 
-# evcs.add_to_ev_list(ev1)
-# evcs.add_to_ev_list(ev2)
-# evcs.add_to_ev_list(ev3)
-# evcs.add_to_ev_list(ev4)
-# evcs.add_to_ev_list(ev5)
-# evcs.add_to_ev_list(ev6)
-# evcs.add_to_ev_list(ev7)
-# evcs.add_to_ev_list(ev8)
-# evcs.add_to_ev_list(ev9)
-# evcs.add_to_ev_list(ev10)
+# 創建一個空的列表，用於存儲所有 EV 對象
+ev_list = []
+# 創建一個字典，用於存儲不同 EV 對象的 SOC 數據
+ev_soc_data_dict = {}
 
-ev1 = EV(1, 0.9, 0.2, 60, datetime(2023, 12, 15, 6, 0), datetime(2023, 12, 15, 13, 0))
-ev2 = EV(2, 0.9, 0.25, 60, datetime(2023, 12, 15, 7, 0), datetime(2023, 12, 15, 13, 0))
-ev3 = EV(3, 0.8, 0.35, 60, datetime(2023, 12, 15, 8, 0), datetime(2023, 12, 15, 13, 0))
-ev4 = EV(4, 0.8, 0.25, 60, datetime(2023, 12, 15, 9, 0), datetime(2023, 12, 15, 13, 0))
-ev5 = EV(5, 0.9, 0.35, 60, datetime(2023, 12, 15, 10, 0), datetime(2023, 12, 15, 13, 0))
-ev6 = EV(6, 0.85, 0.25, 60, datetime(2023, 12, 15, 11, 0), datetime(2023, 12, 15, 13, 0))
+# 將 EV 初始資料從 DataFrame 中讀取
+for _, ev_row in ev_data_df.iterrows():
 
-evcs.add_to_ev_list(ev1)
-evcs.add_to_ev_list(ev2)
-evcs.add_to_ev_list(ev3)
-evcs.add_to_ev_list(ev4)
-evcs.add_to_ev_list(ev5)
-evcs.add_to_ev_list(ev6)
+    # 直接使用 to_datetime 將 Timestamp 轉換為 datetime 對象
+    start_charge_time = pd.to_datetime(ev_row['開始充電時間'])
+    end_charge_time = pd.to_datetime(ev_row['結束充電時間'])
 
-time = datetime(2023, 12, 15, 0, 0)
+    # 使用轉換後的時間數據創建 EV 對象
+    ev = EV(
+        ev_row['卡片名稱'],
+        ev_row['SoC(結束)'],
+        ev_row['SoC(開始)'],
+        100,
+        start_charge_time,
+        end_charge_time
+    )
+    ev_list.append(ev)
+    evcs.add_to_ev_list(ev)
+    # 添加 EV 對象的 SOC 數據到字典中
+    ev_soc_data_dict[ev.number] = []
+
+time = datetime(2024, 1, 24, 0, 0)
 
 # while time < datetime(2023, 12, 16, 23, 0):
 #     tou.current_time = time
@@ -383,16 +376,16 @@ charging_pile_status = evcs.charging_piles
 
 # 建立一個字典來存儲每小時每個充電樁的充電功率
 charging_power_data = {}
-ev1_soc_data = []
-ev2_soc_data = []
-ev3_soc_data = []
-ev4_soc_data = []
-ev5_soc_data = []
-ev6_soc_data = []
-ev7_soc_data = []
-ev8_soc_data = []
-ev9_soc_data = []
-ev10_soc_data = []
+# ev1_soc_data = []
+# ev2_soc_data = []
+# ev3_soc_data = []
+# ev4_soc_data = []
+# ev5_soc_data = []
+# ev6_soc_data = []
+# ev7_soc_data = []
+# ev8_soc_data = []
+# ev9_soc_data = []
+# ev10_soc_data = []
 
 time_list = []
 piles_total_power = []
@@ -405,10 +398,10 @@ for pile in charging_pile_status:
     charging_power_data[f"Pile {pile_number} Gun 1"] = []
     charging_power_data[f"Pile {pile_number} Gun 2"] = []
 
-while time < datetime(2023, 12, 17, 0, 0):
+while time < datetime(2024, 2, 7, 0, 0):
     tou.current_time = time
     for ev in evcs.ev_list:
-        if ev.charge_start_time == time:
+        if ev.charge_start_time <= time:
             evcs.add_ev(ev)
     evcs.update_ev_state_situation0(time)
 
@@ -428,10 +421,12 @@ while time < datetime(2023, 12, 17, 0, 0):
     
     time_list.append(time)
     piles_total_power.append(pile_total_power)
-    ev1_soc_data.append(ev1.now_SOC)
-    ev2_soc_data.append(ev2.now_SOC)
-    ev3_soc_data.append(ev3.now_SOC)
-    ev4_soc_data.append(ev4.now_SOC)
+    for ev in ev_list:
+        ev_soc_data_dict[ev.number].append(ev.now_SOC)
+    # ev1_soc_data.append(ev1.now_SOC)
+    # ev2_soc_data.append(ev2.now_SOC)
+    # ev3_soc_data.append(ev3.now_SOC)
+    # ev4_soc_data.append(ev4.now_SOC)
     # ev5_soc_data.append(ev5.now_SOC)
     # ev6_soc_data.append(ev6.now_SOC)
     # ev7_soc_data.append(ev7.now_SOC)
@@ -494,7 +489,7 @@ x_ticks_positions = np.arange(0, 24 * days, 1)
 x_ticks_labels = [(hr) % 24 for hr in range(24 * days)]
 
 # 將時間步數轉換為小時
-hours = np.arange(0, len(ev1_soc_data), 1)
+hours = np.arange(0, len(time_list), 1)
 
 # 創建一個 subplot
 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
@@ -503,13 +498,11 @@ fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
 
 # 添加柱狀圖
 for idx, (pile, powers) in enumerate(charging_power_data.items()):
-    fig.add_trace(go.Bar(x=time_list, y=powers, name=pile, legendgroup=f"group{idx}"), row=1, col=1)
+    fig.add_trace(go.Scatter(x=time_list, y=powers, mode='lines', name=pile, legendgroup=f"group{idx}"), row=1, col=1)
 
 # 添加 SOC 折線圖
-fig.add_trace(go.Scatter(x=time_list, y=ev1_soc_data, mode='lines', name='EV1 SOC', xaxis='x2'), row=2, col=1)
-fig.add_trace(go.Scatter(x=time_list, y=ev2_soc_data, mode='lines', name='EV2 SOC', xaxis='x2'), row=2, col=1)
-fig.add_trace(go.Scatter(x=time_list, y=ev3_soc_data, mode='lines', name='EV3 SOC', xaxis='x2'), row=2, col=1)
-fig.add_trace(go.Scatter(x=time_list, y=ev4_soc_data, mode='lines', name='EV4 SOC', xaxis='x2'), row=2, col=1)
+for ev_number, soc_data in ev_soc_data_dict.items():
+    fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'EV{ev_number} SOC', xaxis='x2'), row=2, col=1)
 
 # 設定布局
 fig.update_layout(title_text='EV Charging and SOC Over a Day',
