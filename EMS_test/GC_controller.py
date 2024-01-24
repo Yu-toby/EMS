@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
+import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -72,7 +73,7 @@ class ESS:
         self.battery_max_capacity = 1500 * kWh
         self.battery_charge_limit = 0.9 * self.battery_max_capacity
         self.battery_discharge_limit = 0.1 * self.battery_max_capacity
-        self.current_battery = 1200 * kWh
+        self.current_battery = 300 * kWh
         self.required_charging_capacity = self.battery_charge_limit - self.current_battery
 
         self.current_soc = self.current_battery / self.battery_max_capacity
@@ -267,13 +268,23 @@ class GC:
                 print("目前是晚上離峰時段，儲能與電網共同放電。")
                 self.ess.change_ess_state('discharge')
                 ess_charging_time = (self.ess.end_charge_time - self.ess.start_charge_time).total_seconds() / time_cycle
+
                 self.if_grid_provide_power = True
                 self.grid_provide_power = (min(load_demand, self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time)))) if load_demand > 0 else 0
-                self.grid.provide_power(self.grid_provide_power)
                 self.if_ess_provide_power = True
                 self.ess_provide_power = load_demand - self.grid_provide_power if (load_demand > self.grid_provide_power) else 0
-                self.ess.discharging_battery(self.ess_provide_power)
-                return  self.ess_provide_power, self.grid_provide_power
+                
+                if (ess.current_battery - ess.battery_discharge_limit) >= self.ess_provide_power:
+                    self.grid.provide_power(self.grid_provide_power)
+                    self.ess.discharging_battery(self.ess_provide_power)
+                    return  self.ess_provide_power, self.grid_provide_power
+                
+                else:
+                    self.ess_provide_power = ess.current_battery
+                    self.grid_provide_power = load_demand - self.ess_provide_power
+                    self.grid.provide_power(self.grid_provide_power)
+                    self.ess.discharging_battery(self.ess_provide_power)
+                    return  self.ess_provide_power, self.grid_provide_power
             
             else:
                 print("白天5~6點，電網彈性調配。")
@@ -293,6 +304,13 @@ grid = Grid()
 ess = ESS(tou)
 gc = GC(ess, grid, None, tou)
 
+# 儲存數據的列表
+time_list = []
+ess_provide_power_list = []
+grid_provide_power_list = []
+load_list = []
+
+
 load = [180, 140, 100, 110, 90, 130, 160, 10, 10, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0]
 num = 0
 
@@ -309,14 +327,50 @@ while time < datetime(2023, 6, 1, 22, 0, 0):
     # ess.discharging_battery(discharge_power)
 
     ess_provide_power, grid_provide_power = gc.power_control_strategy(load[num])
-    print(f"儲能開始充電時間：{ess.start_charge_time}")
-    print(f"儲能結束充電時間：{ess.end_charge_time}")
-    print(f"儲能開始放電時間：{ess.start_discharge_time}")
-    print(f"儲能結束放電時間：{ess.end_discharge_time}")
+    # print(f"儲能開始充電時間：{ess.start_charge_time}")
+    # print(f"儲能結束充電時間：{ess.end_charge_time}")
+    # print(f"儲能開始放電時間：{ess.start_discharge_time}")
+    # print(f"儲能結束放電時間：{ess.end_discharge_time}")
     print(f"儲能SOC：{ess.current_soc}")
+    print(f"儲能當前電量：{ess.current_battery}")
     print(f"儲能系統提供功率：{ess_provide_power}")
     print(f"電網提供功率：{grid_provide_power}")
     print("\n")
+
+    # 紀錄數據
+    time_list.append(time)
+    ess_provide_power, grid_provide_power = gc.power_control_strategy(load[num])
+    ess_provide_power_list.append(ess_provide_power)
+    grid_provide_power_list.append(grid_provide_power)
+    load_list.append(load[num])
+
     num += 1
 
     time += timedelta(seconds=time_cycle)
+
+# 將數據轉換為 Pandas DataFrame
+df = pd.DataFrame({
+    'Time': time_list,
+    'ESS Provide Power': ess_provide_power_list,
+    'Grid Provide Power': grid_provide_power_list,
+    'Load': load_list
+})
+
+# 使用 Plotly 繪製圖表
+fig = go.Figure()
+
+# 添加 ESS 提供功率、電網提供功率、負載的柱狀圖
+fig.add_trace(go.Bar(x=df['Time'], y=df['ESS Provide Power'], name='ESS Provide Power'))
+fig.add_trace(go.Bar(x=df['Time'], y=df['Grid Provide Power'], name='Grid Provide Power'))
+fig.add_trace(go.Bar(x=df['Time'], y=df['Load'], name='Load'))
+
+# 設定布局
+fig.update_layout(title_text='Power and Load Over Time',
+                  xaxis_title='Time',
+                  yaxis_title='Power (kW)',
+                  barmode='group',  # 將柱子堆疊在一起
+                  showlegend=True,
+                  bargap=0.5)
+
+# 顯示圖表
+fig.show()

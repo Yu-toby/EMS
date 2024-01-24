@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -283,14 +285,12 @@ class EV:
         self.target_SOC = target_SOC
         self.now_SOC = now_SOC
         self.power_limit = power_limit
-        self.charge_start_time = charge_start_time
-        self.charge_end_time = charge_end_time
+        self.charge_start_time = charge_start_time + timedelta(seconds=time_cycle)
+        self.charge_end_time = charge_end_time + timedelta(seconds=time_cycle)
         
         self.now_power = now_SOC * self.battery_max_capacity
         self.pile_number = None  # 車輛連接的充電樁編號
 
-        self.charge_time = (self.charge_end_time - self.charge_start_time) if \
-            self.charge_end_time > self.charge_start_time else (24 - self.charge_start_time + self.charge_end_time)
         self.charge_already_time = 0
         self.charge_pi = 0  # 倍分配充電係數
 
@@ -351,7 +351,7 @@ time = datetime(2023, 12, 15, 0, 0)
 # while time < datetime(2023, 12, 16, 23, 0):
 #     tou.current_time = time
 #     for ev in evcs.ev_list:
-#         if ev.charge_start_time == time:
+#         if ev.charge_start_time <= time:
 #             evcs.add_ev(ev)
 #             evcs.delete_from_ev_list(ev)
 #     evcs.update_ev_state_situation0(time)
@@ -444,48 +444,48 @@ while time < datetime(2023, 12, 17, 0, 0):
     time += timedelta(hours=1)
 
 # =============================================================================
-# 將數據保存到Excel文件
-# 將充電功率和SOC數據轉換為pandas DataFrame
-charging_power_df = pd.DataFrame(charging_power_data)
-pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
-ev_soc_df = pd.DataFrame({
-    'EV1 SOC': ev1_soc_data,
-    'EV2 SOC': ev2_soc_data,
-    'EV3 SOC': ev3_soc_data,
-    'EV4 SOC': ev4_soc_data,
-    # 'EV5 SOC': ev5_soc_data,
-    # 'EV6 SOC': ev6_soc_data,
-    # 'EV7 SOC': ev7_soc_data,
-    # 'EV8 SOC': ev8_soc_data,
-    # 'EV9 SOC': ev9_soc_data,
-    # 'EV10 SOC': ev10_soc_data,
-})
+# # 將數據保存到Excel文件
+# # 將充電功率和SOC數據轉換為pandas DataFrame
+# charging_power_df = pd.DataFrame(charging_power_data)
+# pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
+# ev_soc_df = pd.DataFrame({
+#     'EV1 SOC': ev1_soc_data,
+#     'EV2 SOC': ev2_soc_data,
+#     'EV3 SOC': ev3_soc_data,
+#     'EV4 SOC': ev4_soc_data,
+#     # 'EV5 SOC': ev5_soc_data,
+#     # 'EV6 SOC': ev6_soc_data,
+#     # 'EV7 SOC': ev7_soc_data,
+#     # 'EV8 SOC': ev8_soc_data,
+#     # 'EV9 SOC': ev9_soc_data,
+#     # 'EV10 SOC': ev10_soc_data,
+# })
 
-# 將時間信息添加到 DataFrame 的第一行
-charging_power_df.insert(0, 'Time', time_list)
-pile_total_power_df.insert(0, 'Time', time_list)
-ev_soc_df.insert(0, 'Time', time_list)
+# # 將時間信息添加到 DataFrame 的第一行
+# charging_power_df.insert(0, 'Time', time_list)
+# pile_total_power_df.insert(0, 'Time', time_list)
+# ev_soc_df.insert(0, 'Time', time_list)
 
-# 獲取腳本所在目錄的絕對路徑
-script_directory = os.path.dirname(os.path.abspath(__file__))
+# # 獲取腳本所在目錄的絕對路徑
+# script_directory = os.path.dirname(os.path.abspath(__file__))
 
-# 獲取當前日期和時間
-current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+# # 獲取當前日期和時間
+# current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-# 構建Excel文件的完整路徑，以日期和時間命名
-excel_file_path = os.path.join(script_directory, "output_result_data", f"data_{current_datetime}.xlsx")
+# # 構建Excel文件的完整路徑，以日期和時間命名
+# excel_file_path = os.path.join(script_directory, "output_result_data", f"data_{current_datetime}.xlsx")
 
-# 如果 "output_result_data" 資料夾不存在，則創建它
-output_folder = os.path.join(script_directory, "output_result_data")
-os.makedirs(output_folder, exist_ok=True)
+# # 如果 "output_result_data" 資料夾不存在，則創建它
+# output_folder = os.path.join(script_directory, "output_result_data")
+# os.makedirs(output_folder, exist_ok=True)
 
-# 將數據保存到Excel文件
-with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
-    charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
-    pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
-    ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
+# # 將數據保存到Excel文件
+# with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+#     charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
+#     pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
+#     ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
 
-print("Excel檔案已成功生成：charging_data.xlsx")
+# print("Excel檔案已成功生成：charging_data.xlsx")
 
 # =============================================================================
 # 繪製圖表
@@ -496,45 +496,31 @@ x_ticks_labels = [(hr) % 24 for hr in range(24 * days)]
 # 將時間步數轉換為小時
 hours = np.arange(0, len(ev1_soc_data), 1)
 
-plt.figure(1)
-# 繪製柱狀圖
-plt.subplot(2, 1, 1)
-# plt.figure(figsize=(12, 6))
-for pile, powers in charging_power_data.items():
-    plt.bar(hours, powers, label=pile, alpha=0.7)
-# 添加標題與標籤
-plt.title('EV Charging Power Over a Day')
-plt.xlabel('Time Steps (Hour)')
-plt.ylabel('EV Charging Power (kW)')
-# 設定 X 軸刻度標籤
-plt.xticks(x_ticks_positions, x_ticks_labels)
-# 添加圖例
-plt.legend()
+# 創建一個 subplot
+fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
+                    subplot_titles=['EV Charging Power Over a Day', 'EV SOC Over a Day'],
+                    row_heights=[0.7, 0.3]) # 設定子圖的高度比例
 
-# 繪製SOC累積折線圖
-plt.subplot(2, 1, 2)
-plt.plot(hours, ev1_soc_data, label='EV1 SOC')
-plt.plot(hours, ev2_soc_data, label='EV2 SOC')
-plt.plot(hours, ev3_soc_data, label='EV3 SOC')
-plt.plot(hours, ev4_soc_data, label='EV4 SOC')
-# plt.plot(hours, ev5_soc_data, label='EV5 SOC')
-# plt.plot(hours, ev6_soc_data, label='EV6 SOC')
-# plt.plot(hours, ev7_soc_data, label='EV7 SOC')
-# plt.plot(hours, ev8_soc_data, label='EV8 SOC')
-# plt.plot(hours, ev9_soc_data, label='EV9 SOC')
-# plt.plot(hours, ev10_soc_data, label='EV10 SOC')
-# 添加標題與標籤
-plt.title('EV SOC Over a Day')
-plt.xlabel('Time Steps (Hour)')
-plt.ylabel('EV SOC')
-# 設定 X 軸刻度標籤
-plt.xticks(x_ticks_positions, x_ticks_labels)
-# 添加圖例
-plt.legend()
+# 添加柱狀圖
+for idx, (pile, powers) in enumerate(charging_power_data.items()):
+    fig.add_trace(go.Bar(x=time_list, y=powers, name=pile, legendgroup=f"group{idx}"), row=1, col=1)
 
-# 調整子圖之間的間距
-plt.tight_layout()
+# 添加 SOC 折線圖
+fig.add_trace(go.Scatter(x=time_list, y=ev1_soc_data, mode='lines', name='EV1 SOC', xaxis='x2'), row=2, col=1)
+fig.add_trace(go.Scatter(x=time_list, y=ev2_soc_data, mode='lines', name='EV2 SOC', xaxis='x2'), row=2, col=1)
+fig.add_trace(go.Scatter(x=time_list, y=ev3_soc_data, mode='lines', name='EV3 SOC', xaxis='x2'), row=2, col=1)
+fig.add_trace(go.Scatter(x=time_list, y=ev4_soc_data, mode='lines', name='EV4 SOC', xaxis='x2'), row=2, col=1)
+
+# 設定布局
+fig.update_layout(title_text='EV Charging and SOC Over a Day',
+                    xaxis_title='Time Steps (Hour)',
+                    yaxis_title='Power (kW)',
+                    xaxis2_title='Time Steps (Hour)',
+                    yaxis2_title='SOC',
+                    showlegend=True,  # 顯示圖例
+                    xaxis=dict(type='category', tickmode='array', tickvals=time_list, ticktext=[str(t) for t in time_list]),
+                    barmode='group',  # stack：將柱狀圖疊加顯示；group：將柱狀圖並排顯示；overlay：將柱狀圖重疊顯示，並將透明度設為0.5
+                    bargap=0.2)  # 控制柱狀圖之間的間距
 
 # 顯示圖表
-plt.show()
-
+fig.show()
