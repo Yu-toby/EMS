@@ -282,13 +282,14 @@ class GC:
                 self.grid_provide_power = self.grid.provide_power((ess_charge_power + load_demand))
                 self.daytime_grid_provide_total_power += self.grid_provide_power
                 self.ess_provide_power = - ess_charge_power
+                self.last_time_grid_provide_power = self.grid_provide_power
                 return  self.ess_provide_power, self.grid_provide_power
             
             elif self.ess.start_discharge_time <= self.tou.current_time < self.ess.end_discharge_time:   # 晚間電車充電時間，由電網及儲能供充電樁
                 print("目前是晚上離峰時段，儲能與電網共同放電。")
                 self.ess.change_ess_state('discharge')
                 ess_charging_time = (self.ess.end_charge_time - self.ess.start_charge_time).total_seconds() / time_cycle
-                self.last_time_grid_provide_power = self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time))
+                # self.last_time_grid_provide_power = self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time))
 
                 self.if_grid_provide_power = True
                 self.grid_provide_power = (min(load_demand, self.last_time_grid_provide_power)) if load_demand > 0 else 0
@@ -299,6 +300,7 @@ class GC:
                     print("儲能系統提供電力沒變。")
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess.discharging_battery(self.ess_provide_power)
+                    self.last_time_grid_provide_power = self.grid_provide_power
                     return  self.ess_provide_power, self.grid_provide_power
                 
                 else:
@@ -307,6 +309,7 @@ class GC:
                     self.grid_provide_power = load_demand - self.ess_provide_power
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess.discharging_battery(self.ess_provide_power)
+                    self.last_time_grid_provide_power = self.grid_provide_power
                     return  self.ess_provide_power, self.grid_provide_power
             
             else:
