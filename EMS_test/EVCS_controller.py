@@ -134,9 +134,101 @@ class EVCS:
                     continue
 
         print('找不到可用的充電槍，請檢查充電樁狀態')
-
-    # *兩槍充電功率均分充電樁最大輸出功率*
+    
+    # *現況*
     def update_ev_state_situation0(self, time_step):
+        for charging_pile in self.charging_piles:
+            guns = charging_pile.get('gun', [])
+            check_ev_number1, check_ev_number2 = False, False
+            # total_charging_power = 0  # 用於累計兩槍的總充電功率
+
+            if len(guns) >= 2:
+                # 直接存取兩個gun
+                gun1, gun2 = guns[0], guns[1]
+                ev_number1, ev_number2 = gun1['ev_number'], gun2['ev_number']
+                charge_power1, charge_power2, charge_soc1, charge_soc2 = 0, 0, 0, 0
+
+                if ev_number1 != 0:
+                    self.gun1_empty = False
+                    ev1 = self.find_ev_by_number(ev_number1)
+                    if ev1:
+                        if (ev1.now_SOC == ev1.target_SOC) or (gun1['check_charging'] and ev1.charge_end_time <= time_step):
+                            # 充完電就離開
+                            self.delete_ev(ev1)
+                            check_ev_number1 = False
+                            charge_power1, charge_soc1 = 0, 0
+                            self.gun1_empty = True
+
+                        if (ev1.charge_start_time <= time_step < ev1.charge_end_time):
+                                gun1['check_charging'] = True
+                                check_ev_number1 = True
+                                # charge_power1, charge_soc1 = ev1.calculate_charge_power(time_step)
+                                charge_power1 = min(self.pile_power_limit, (ev1.target_SOC - ev1.now_SOC) * ev1.battery_max_capacity)
+                                charge_soc1 = charge_power1 / ev1.battery_max_capacity
+
+                else:
+                    self.gun1_empty = True
+
+                if ev_number2 != 0:
+                    self.gun2_empty = False
+                    ev2 = self.find_ev_by_number(ev_number2)
+                    if ev2:
+                        if (ev2.now_SOC == ev2.target_SOC) or (gun2['check_charging'] and ev2.charge_end_time <= time_step):
+                            # 充完電就離開
+                            self.delete_ev(ev2)
+                            check_ev_number2 = False
+                            charge_power2, charge_soc2 = 0, 0
+                            self.gun2_empty = True
+
+                        if (ev2.charge_start_time <= time_step < ev2.charge_end_time):
+                                gun2['check_charging'] = True
+                                check_ev_number2 = True
+                                # charge_power2, charge_soc2 = ev2.calculate_charge_power(time_step)
+                                charge_power2 = min(self.pile_power_limit, (ev2.target_SOC - ev2.now_SOC) * ev2.battery_max_capacity)
+                                charge_soc2 = charge_power2 / ev2.battery_max_capacity
+
+                else:
+                    self.gun2_empty = True
+
+                if (charge_power1 + charge_power2) > self.pile_power_limit:
+                    # 如果兩槍的充電功率總和超過充電樁功率上限
+                    new_charge_power1 = min(charge_power1, (self.pile_power_limit / 2))
+                    new_charge_power2 = min(charge_power2, (self.pile_power_limit / 2))
+                    charge_soc1 = new_charge_power1 / ev1.battery_max_capacity
+                    charge_soc2 = new_charge_power2 / ev2.battery_max_capacity
+
+                    # 更新槍1的充電狀態
+                    ev1.now_SOC += charge_soc1
+                    ev1.now_power = ev1.now_SOC * ev1.battery_max_capacity
+                    gun1['charging_power'] = round(new_charge_power1, 2)
+
+                    # 更新槍2的充電狀態
+                    ev2.now_SOC += charge_soc2
+                    ev2.now_power = ev2.now_SOC * ev2.battery_max_capacity
+                    gun2['charging_power'] = round(new_charge_power2, 2)
+
+                else:
+                    # 如果兩槍的充電功率總和沒有超過充電樁功率上限，則直接更新充電功率
+                    if check_ev_number1:
+                        # 更新槍1的充電狀態
+                        ev1.now_SOC += charge_soc1
+                        ev1.now_power = ev1.now_SOC * ev1.battery_max_capacity
+                        gun1['charging_power'] = round(charge_power1, 2)
+                    else:
+                        gun1['charging_power'] = 0
+
+                    if check_ev_number2:
+                        # 更新槍2的充電狀態
+                        ev2.now_SOC += charge_soc2
+                        ev2.now_power = ev2.now_SOC * ev2.battery_max_capacity
+                        gun2['charging_power'] = round(charge_power2, 2)
+                    else:
+                        gun2['charging_power'] = 0
+
+        return self.charging_piles
+    
+    # *兩槍充電功率均分充電樁最大輸出功率*
+    def update_ev_state_situation1(self, time_step):
         for charging_pile in self.charging_piles:
             guns = charging_pile.get('gun', [])
             check_ev_number1, check_ev_number2 = False, False
@@ -328,8 +420,8 @@ for _, ev_row in ev_data_df.iterrows():
     # 使用轉換後的時間數據創建 EV 對象
     ev = EV(
         ev_row['卡片名稱'],
-        ev_row['SoC(結束)'],
-        ev_row['SoC(開始)'],
+        ev_row['SoC(結束)']/100,
+        ev_row['SoC(開始)']/100,
         100,
         start_charge_time,
         end_charge_time
@@ -339,7 +431,7 @@ for _, ev_row in ev_data_df.iterrows():
     # 添加 EV 對象的 SOC 數據到字典中
     ev_soc_data_dict[ev.number] = []
 
-time = datetime(2024, 1, 24, 0, 0)
+time = datetime(2024, 1, 26, 0, 0)
 
 # while time < datetime(2023, 12, 16, 23, 0):
 #     tou.current_time = time
@@ -398,7 +490,7 @@ for pile in charging_pile_status:
     charging_power_data[f"Pile {pile_number} Gun 1"] = []
     charging_power_data[f"Pile {pile_number} Gun 2"] = []
 
-while time < datetime(2024, 1, 26, 0, 0):
+while time < datetime(2024, 2, 3, 0, 0):
     tou.current_time = time
     for ev in evcs.ev_list:
         if ev.charge_start_time <= time:
@@ -440,15 +532,16 @@ while time < datetime(2024, 1, 26, 0, 0):
     time += timedelta(seconds=time_cycle)
 
 # =============================================================================
-# # 將數據保存到Excel文件
-# # 將充電功率和SOC數據轉換為pandas DataFrame
-# charging_power_df = pd.DataFrame(charging_power_data)
-# pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
+# 將數據保存到Excel文件
+# 將充電功率和SOC數據轉換為pandas DataFrame
+charging_power_df = pd.DataFrame(charging_power_data)
+pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
+# ev_soc_df = pd.DataFrame({ev.number: ev_soc_data_dict[ev.number] for ev in ev_list})
 # ev_soc_df = pd.DataFrame({
-#     'EV1 SOC': ev1_soc_data,
-#     'EV2 SOC': ev2_soc_data,
-#     'EV3 SOC': ev3_soc_data,
-#     'EV4 SOC': ev4_soc_data,
+#     # 'EV1 SOC': ev1_soc_data,
+#     # 'EV2 SOC': ev2_soc_data,
+#     # 'EV3 SOC': ev3_soc_data,
+#     # 'EV4 SOC': ev4_soc_data,
 #     # 'EV5 SOC': ev5_soc_data,
 #     # 'EV6 SOC': ev6_soc_data,
 #     # 'EV7 SOC': ev7_soc_data,
@@ -457,31 +550,31 @@ while time < datetime(2024, 1, 26, 0, 0):
 #     # 'EV10 SOC': ev10_soc_data,
 # })
 
-# # 將時間信息添加到 DataFrame 的第一行
-# charging_power_df.insert(0, 'Time', time_list)
-# pile_total_power_df.insert(0, 'Time', time_list)
+# 將時間信息添加到 DataFrame 的第一行
+charging_power_df.insert(0, 'Time', time_list)
+pile_total_power_df.insert(0, 'Time', time_list)
 # ev_soc_df.insert(0, 'Time', time_list)
 
-# # 獲取腳本所在目錄的絕對路徑
-# script_directory = os.path.dirname(os.path.abspath(__file__))
+# 獲取腳本所在目錄的絕對路徑
+script_directory = os.path.dirname(os.path.abspath(__file__))
 
-# # 獲取當前日期和時間
-# current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+# 獲取當前日期和時間
+current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-# # 構建Excel文件的完整路徑，以日期和時間命名
-# excel_file_path = os.path.join(script_directory, "output_result_data", f"data_{current_datetime}.xlsx")
+# 構建Excel文件的完整路徑，以日期和時間命名
+excel_file_path = os.path.join(script_directory, "output_result_data", f"data_{current_datetime}.xlsx")
 
-# # 如果 "output_result_data" 資料夾不存在，則創建它
-# output_folder = os.path.join(script_directory, "output_result_data")
-# os.makedirs(output_folder, exist_ok=True)
+# 如果 "output_result_data" 資料夾不存在，則創建它
+output_folder = os.path.join(script_directory, "output_result_data")
+os.makedirs(output_folder, exist_ok=True)
 
-# # 將數據保存到Excel文件
-# with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
-#     charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
-#     pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
-#     ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
+# 將數據保存到Excel文件
+with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+    charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
+    pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
+    # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
 
-# print("Excel檔案已成功生成：charging_data.xlsx")
+print("Excel檔案已成功生成：charging_data.xlsx")
 
 # =============================================================================
 # 繪製圖表
@@ -495,20 +588,23 @@ hours = np.arange(0, len(time_list), 1)
 # 創建一個 subplot
 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
                     subplot_titles=['EV Charging Power Over a Day', 'EV SOC Over a Day'],
-                    row_heights=[0.7, 0.3]) # 設定子圖的高度比例
+                    row_heights=[1,0]) # 設定子圖的高度比例
 
-# 添加柱狀圖
+# 添加充電功率折線圖
 for idx, (pile, powers) in enumerate(charging_power_data.items()):
     fig.add_trace(go.Scatter(x=time_list, y=powers, mode='lines', name=pile, legendgroup=f"group{idx}"), row=1, col=1)
 
-# 添加 SOC 折線圖
-for ev_number, soc_data in ev_soc_data_dict.items():
-    fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'EV{ev_number} SOC', xaxis='x2'), row=2, col=1)
+# 添加充電樁總功率折線圖
+fig.add_trace(go.Scatter(x=time_list, y=piles_total_power, mode='lines', name='Piles Total Power', legendgroup=f"group{11}"), row=1, col=1)
+
+# # 添加 SOC 折線圖
+# for ev_number, soc_data in ev_soc_data_dict.items():
+#     fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'{ev_number} SOC', xaxis='x2'), row=2, col=1)
 
 # 設定布局
 fig.update_layout(title_text='EV Charging and SOC Over a Day',
                     xaxis_title='Time Steps (Hour)',
-                    yaxis_title='Power (kW)',
+                    yaxis_title='Power (W)',
                     xaxis2_title='Time Steps (Hour)',
                     yaxis2_title='SOC',
                     showlegend=True,  # 顯示圖例
