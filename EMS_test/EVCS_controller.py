@@ -61,6 +61,8 @@ class EVCS:
         self.gun1_empty = True
         self.gun2_empty = True
 
+        self.excel_mark = ['', '']
+
         for group in range(1, piles_amount + 1):
             charging_pile = {
                 "pile_number": str(group),
@@ -87,7 +89,34 @@ class EVCS:
     def delete_from_ev_list(self, ev):
         self.ev_list.remove(ev)
 
-    def add_ev(self, ev):
+    # 照順序1-1, 1-2找空的槍
+    def add_ev0(self, ev):   
+        self.excel_mark[0] = '照順序1-1, 1-2找空的槍'
+        # 逐一搜尋 charging_piles 集合中的每一個 charging_pile
+        for charging_pile in self.charging_piles:
+            guns = charging_pile.get('gun', [])
+
+            # 逐一檢查每個 gun 的 ev_number
+            for gun in guns:
+                if gun['ev_number'] == 0:
+                    # 如果 ev_number 為空，則填入要添加的 EV 資料
+                    gun['ev_number'] = ev.number
+                    gun['charging_power'] = 0  # 預設充電功率
+                    gun['start_time'] = ev.charge_start_time
+                    gun['end_time'] = ev.charge_end_time
+                    gun['check_charging'] = False  # 預設未充電
+                    self.connected_evs.append(ev)
+                    return  # 結束函式，已找到並填入 EV 資料
+
+                elif gun['ev_number'] == ev.number:
+                    print('該車編號已存在，請確認是否有誤')
+                    return  # 結束函式，已找到重複的 EV 資料
+
+        print('找不到可用的充電槍，請檢查充電樁狀態')
+
+    # 先找空的樁，若沒有才共用槍
+    def add_ev1(self, ev):
+        self.excel_mark[0] = '先找空的樁，若沒有才共用槍'
         # 逐一搜尋 charging_piles 集合中的每一個 charging_pile
         for num in range(2):
             for charging_pile in self.charging_piles:
@@ -137,6 +166,7 @@ class EVCS:
     
     # *現況*
     def update_ev_state_situation0(self, time_step):
+        self.excel_mark[1] = '滿功率充電'
         for charging_pile in self.charging_piles:
             guns = charging_pile.get('gun', [])
             check_ev_number1, check_ev_number2 = False, False
@@ -229,6 +259,7 @@ class EVCS:
     
     # *兩槍充電功率均分充電樁最大輸出功率*
     def update_ev_state_situation1(self, time_step):
+        self.excel_mark[1] = '兩槍充電功率均分充電樁最大輸出功率'
         for charging_pile in self.charging_piles:
             guns = charging_pile.get('gun', [])
             check_ev_number1, check_ev_number2 = False, False
@@ -468,16 +499,6 @@ charging_pile_status = evcs.charging_piles
 
 # 建立一個字典來存儲每小時每個充電樁的充電功率
 charging_power_data = {}
-# ev1_soc_data = []
-# ev2_soc_data = []
-# ev3_soc_data = []
-# ev4_soc_data = []
-# ev5_soc_data = []
-# ev6_soc_data = []
-# ev7_soc_data = []
-# ev8_soc_data = []
-# ev9_soc_data = []
-# ev10_soc_data = []
 
 time_list = []
 piles_total_power = []
@@ -494,9 +515,9 @@ while time < datetime(2024, 2, 3, 0, 0):
     tou.current_time = time
     for ev in evcs.ev_list:
         if ev.charge_start_time <= time:
-            evcs.add_ev(ev)
+            evcs.add_ev1(ev)
             evcs.delete_from_ev_list(ev)
-    evcs.update_ev_state_situation0(time)
+    evcs.update_ev_state_situation1(time)
 
     print(f"Time {time}")
     for idx, charging_pile in enumerate(charging_pile_status):
@@ -516,16 +537,6 @@ while time < datetime(2024, 2, 3, 0, 0):
     piles_total_power.append(pile_total_power)
     for ev in ev_list:
         ev_soc_data_dict[ev.number].append(ev.now_SOC)
-    # ev1_soc_data.append(ev1.now_SOC)
-    # ev2_soc_data.append(ev2.now_SOC)
-    # ev3_soc_data.append(ev3.now_SOC)
-    # ev4_soc_data.append(ev4.now_SOC)
-    # ev5_soc_data.append(ev5.now_SOC)
-    # ev6_soc_data.append(ev6.now_SOC)
-    # ev7_soc_data.append(ev7.now_SOC)
-    # ev8_soc_data.append(ev8.now_SOC)
-    # ev9_soc_data.append(ev9.now_SOC)
-    # ev10_soc_data.append(ev10.now_SOC)
     
     print("\n")
 
@@ -536,24 +547,14 @@ while time < datetime(2024, 2, 3, 0, 0):
 # 將充電功率和SOC數據轉換為pandas DataFrame
 charging_power_df = pd.DataFrame(charging_power_data)
 pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
-# ev_soc_df = pd.DataFrame({ev.number: ev_soc_data_dict[ev.number] for ev in ev_list})
-# ev_soc_df = pd.DataFrame({
-#     # 'EV1 SOC': ev1_soc_data,
-#     # 'EV2 SOC': ev2_soc_data,
-#     # 'EV3 SOC': ev3_soc_data,
-#     # 'EV4 SOC': ev4_soc_data,
-#     # 'EV5 SOC': ev5_soc_data,
-#     # 'EV6 SOC': ev6_soc_data,
-#     # 'EV7 SOC': ev7_soc_data,
-#     # 'EV8 SOC': ev8_soc_data,
-#     # 'EV9 SOC': ev9_soc_data,
-#     # 'EV10 SOC': ev10_soc_data,
-# })
+illustrate_df = pd.DataFrame({'說明': evcs.excel_mark})
 
 # 將時間信息添加到 DataFrame 的第一行
 charging_power_df.insert(0, 'Time', time_list)
 pile_total_power_df.insert(0, 'Time', time_list)
-# ev_soc_df.insert(0, 'Time', time_list)
+
+# 添加描述性的標題行
+pile_total_power_df.columns = ['Time', 'Pile Total Power']
 
 # 獲取腳本所在目錄的絕對路徑
 script_directory = os.path.dirname(os.path.abspath(__file__))
@@ -562,16 +563,17 @@ script_directory = os.path.dirname(os.path.abspath(__file__))
 current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
 
 # 構建Excel文件的完整路徑，以日期和時間命名
-excel_file_path = os.path.join(script_directory, "output_result_data", f"data_{current_datetime}.xlsx")
+excel_file_path = os.path.join(script_directory, "pile_output_result_data", f"pile_data_{current_datetime}.xlsx")
 
-# 如果 "output_result_data" 資料夾不存在，則創建它
-output_folder = os.path.join(script_directory, "output_result_data")
+# 如果 "pile_output_result_data" 資料夾不存在，則創建它
+output_folder = os.path.join(script_directory, "pile_output_result_data")
 os.makedirs(output_folder, exist_ok=True)
 
 # 將數據保存到Excel文件
 with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
-    charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
+    illustrate_df.to_excel(writer, sheet_name='說明', index=False)
     pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
+    charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
     # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
 
 print("Excel檔案已成功生成：charging_data.xlsx")

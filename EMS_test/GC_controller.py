@@ -7,9 +7,9 @@ import numpy as np
 import pandas as pd
 import os
 
-kWh = 1  # 1kWh = 1000度電
-kw = 1  # 1kW = 1000瓦
-time_cycle = 3600  # 時間間隔為1小時
+kWh = 1000  # 1kWh = 1000度電
+kw = 1000  # 1kW = 1000瓦
+time_cycle = 3600/4  # 時間間隔為1小時
 
 class TOU:
     def __init__(self, current_time=None):
@@ -104,7 +104,7 @@ class ESS:
                                             self.tou.current_time.day, 22, 0, 0)  # 22點開始放電
         self.end_discharge_time = datetime(self.tou.current_time.year, 
                                     self.tou.current_time.month, 
-                                    self.tou.current_time.day, 5, 0, 0) + relativedelta(days=1) 
+                                    self.tou.current_time.day, 6, 0, 0) + relativedelta(days=1) 
 
         self.ess_state = 0  # 0:不動作 1:充電 2:放電
 
@@ -121,7 +121,10 @@ class ESS:
 
         self.start_discharge_time = datetime(self.tou.current_time.year, 
                                             self.tou.current_time.month, 
-                                            self.tou.current_time.day, 22, 0, 0)  # 22點開始放電
+                                            self.tou.current_time.day, 22, 0, 0) if self.tou.if_summer() else \
+                                    datetime(self.tou.current_time.year,
+                                            self.tou.current_time.month,
+                                            self.tou.current_time.day, 21, 0, 0)    # 尖峰結束時間
         self.end_discharge_time = datetime(self.tou.current_time.year, 
                                     self.tou.current_time.month, 
                                     self.tou.current_time.day, 5, 0, 0) + relativedelta(days=1)
@@ -204,6 +207,7 @@ class GC:
 
         self.night_grid_provide_total_power = 0
         self.daytime_grid_provide_total_power = 0
+        self.last_time_grid_provide_power = 0
 
         self.grid_provide_power_factor = 1    # 電網供電功率修正係數
 
@@ -211,6 +215,8 @@ class GC:
         self.grid = grid
         self.evcs = evcs
         self.tou = tou
+
+        self.excel_mark = []
 
     def ess_charging_schedule(self):
             if self.ess.start_charge_time <= self.tou.current_time< self.ess.end_charge_time:
@@ -226,7 +232,19 @@ class GC:
         else:
             return False
 
-    def power_control_strategy(self, load_demand):
+    # 沒加儲能系統
+    def power_control_strategy0(self, load_demand):
+        self.excel_mark = '沒加儲能系統'
+        print("只有電網供電。")
+        self.if_ess_provide_power = False
+        self.ess_provide_power = 0
+        self.if_grid_provide_power = True
+        self.grid_provide_power = load_demand
+        return  self.ess_provide_power, self.grid_provide_power
+
+    # 有加儲能系統
+    def power_control_strategy1(self, load_demand):
+        self.excel_mark = '有加儲能系統'
         # evcs.update_ev_state_situation0(self.tou.current_time.hour)
         # self.pile_load_demand = evcs.get_pile_summary()[1]
         self.tou_peak_hr = self.tou.get_tou()[0]
@@ -257,6 +275,7 @@ class GC:
                 self.if_ess_provide_power = False
                 self.ess_provide_power = 0
                 self.if_grid_provide_power = True
+
                 ess_calculate_charge_power = self.ess.calculate_charge_power()
                 ess_charge_power = min((ess_calculate_charge_power), (self.grid.max_output_power - load_demand))
                 self.ess.charging_battery(ess_charge_power)
@@ -269,9 +288,10 @@ class GC:
                 print("目前是晚上離峰時段，儲能與電網共同放電。")
                 self.ess.change_ess_state('discharge')
                 ess_charging_time = (self.ess.end_charge_time - self.ess.start_charge_time).total_seconds() / time_cycle
+                self.last_time_grid_provide_power = self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time))
 
                 self.if_grid_provide_power = True
-                self.grid_provide_power = (min(load_demand, self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time)))) if load_demand > 0 else 0
+                self.grid_provide_power = (min(load_demand, self.last_time_grid_provide_power)) if load_demand > 0 else 0
                 self.if_ess_provide_power = True
                 self.ess_provide_power = load_demand - self.grid_provide_power if (load_demand > self.grid_provide_power) else 0
                 
@@ -301,7 +321,7 @@ class GC:
 
 
 
-time = datetime(2023, 5, 31, 22, 0, 0)
+time = datetime(2024, 1, 26, 0, 0)
 tou = TOU(time)
 grid = Grid()
 ess = ESS(tou)
@@ -314,11 +334,17 @@ ess_soc_list = []
 grid_provide_power_list = []
 load_list = []
 
+# load = [180, 140, 100, 110, 90, 130, 160, 10, 10, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0]
+# 讀取包含 Load 數據的 Excel 文件
+excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\EMS_test\pile_output_result_data\pile_data_20240127_210417.xlsx"  # 替換為你的實際路徑
+load_data_df = pd.read_excel(excel_file_path, sheet_name='Pile total Power')  # 替換為你的Sheet名稱
 
-load = [180, 140, 100, 110, 90, 130, 160, 10, 10, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0]
+# 從 DataFrame 中提取 Load 數據
+load = load_data_df['Pile Total Power'].tolist()
+
 num = 0
 
-while time < datetime(2023, 6, 1, 22, 0, 0):
+while time < datetime(2024, 2, 3, 0, 0):
     tou.current_time = time
     # ess.update_ess_time()
 
@@ -332,7 +358,7 @@ while time < datetime(2023, 6, 1, 22, 0, 0):
 
     print(f"儲能SOC：{ess.current_soc}")
     print(f"儲能當前電量：{ess.current_battery}")
-    ess_provide_power, grid_provide_power = gc.power_control_strategy(load[num])
+    ess_provide_power, grid_provide_power = gc.power_control_strategy1(load[num])
     # print(f"儲能開始充電時間：{ess.start_charge_time}")
     # print(f"儲能結束充電時間：{ess.end_charge_time}")
     # print(f"儲能開始放電時間：{ess.start_discharge_time}")
@@ -354,6 +380,39 @@ while time < datetime(2023, 6, 1, 22, 0, 0):
 
     time += timedelta(seconds=time_cycle)
 
+# ====================================================================================================
+# 將數據保存到 Excel 文件
+data_df = pd.DataFrame({
+    'Time': time_list,
+    'ESS Provide Power': ess_provide_power_list,
+    'Grid Provide Power': grid_provide_power_list,
+    'Load': load_list,
+    'ESS SOC': ess_soc_list
+})
+illustrate_df = pd.DataFrame({'說明': [gc.excel_mark]})
+
+# 獲取腳本所在目錄的絕對路徑
+script_directory = os.path.dirname(os.path.abspath(__file__))
+
+# 獲取當前日期和時間
+current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# 構建Excel文件的完整路徑，以日期和時間命名
+excel_file_path = os.path.join(script_directory, "GC_output_result_data", f"GC_data_{current_datetime}.xlsx")
+
+# 如果 "GC_output_result_data" 資料夾不存在，則創建它
+output_folder = os.path.join(script_directory, "GC_output_result_data")
+os.makedirs(output_folder, exist_ok=True)
+
+# 將數據保存到Excel文件
+with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+    illustrate_df.to_excel(writer, sheet_name='說明', index=False)
+    data_df.to_excel(writer, sheet_name='GC_ESS_Load', index=False)
+    # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
+
+print("Excel檔案已成功生成：GC_data.xlsx")
+
+# ====================================================================================================
 # 將數據轉換為 Pandas DataFrame
 df = pd.DataFrame({
     'Time': time_list,
@@ -367,9 +426,9 @@ df = pd.DataFrame({
 fig = make_subplots(rows=2, cols=1, shared_xaxes=True, subplot_titles=['Power Over Time', 'ESS SOC Over Time'])
 
 # 添加 ESS 提供功率、電網提供功率、負載的柱狀圖
-fig.add_trace(go.Bar(x=df['Time'], y=df['ESS Provide Power'], name='ESS Provide Power'), row=1, col=1)
-fig.add_trace(go.Bar(x=df['Time'], y=df['Grid Provide Power'], name='Grid Provide Power'), row=1, col=1)
-fig.add_trace(go.Bar(x=df['Time'], y=df['Load'], name='Load'), row=1, col=1)
+fig.add_trace(go.Scatter(x=df['Time'], y=df['ESS Provide Power'], name='ESS Provide Power'), row=1, col=1)
+fig.add_trace(go.Scatter(x=df['Time'], y=df['Grid Provide Power'], name='Grid Provide Power'), row=1, col=1)
+fig.add_trace(go.Scatter(x=df['Time'], y=df['Load'], name='Load'), row=1, col=1)
 
 # 添加 ESS SOC 的折線圖
 fig.add_trace(go.Scatter(x=df['Time'], y=df['ESS SOC'], name='ESS SOC', line=dict(color='firebrick', width=2, dash='solid')), row=2, col=1)
