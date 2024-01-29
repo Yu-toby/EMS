@@ -321,10 +321,106 @@ class GC:
                 self.if_grid_provide_power = True
                 self.grid_provide_power = self.grid.provide_power(load_demand)
                 return self.ess_provide_power, self.grid_provide_power
+            
+    # 電網功率 控制有10%的振幅
+    def power_control_strategy2(self, load_demand):
+        self.excel_mark = '有加儲能系統'
+        # evcs.update_ev_state_situation0(self.tou.current_time.hour)
+        # self.pile_load_demand = evcs.get_pile_summary()[1]
+        self.tou_peak_hr = self.tou.get_tou()[0]
+
+        if self.tou.current_time.hour == 6:
+            self.daytime_grid_provide_total_power = 0
+
+        if self.tou.current_time.hour == 22:
+            self.night_grid_provide_total_power = 0
+
+        # 判斷是否為尖峰時段
+        if self.tou_peak_hr == "尖峰":
+            # 尖峰時段
+            print("目前是尖峰時段，由除能供電。")
+            self.ess.change_ess_state('discharge')
+            self.if_ess_provide_power = True
+            self.ess_provide_power = self.ess.discharging_battery(
+                load_demand)[2]
+            self.if_grid_provide_power = False
+            self.grid_provide_power = 0
+            return self.ess_provide_power, self.grid_provide_power
+        
+        else:
+            # 非尖峰時段
+            if self.ess.start_charge_time <= self.tou.current_time< self.ess.end_charge_time:    # 儲能充電時間，由電網供儲能及充電樁
+                print("目前是白天離峰時段，儲能充電時間，儲能系統充電中。")
+                self.ess.change_ess_state('charge')
+                self.if_ess_provide_power = False
+                self.ess_provide_power = 0
+                self.if_grid_provide_power = True
+                ess_calculate_charge_power = self.ess.calculate_charge_power()
+
+                if load_demand > self.last_time_grid_provide_power*1.1:
+                    self.grid_provide_power = self.grid.provide_power(load_demand)
+                    self.ess_provide_power = 0
+                    self.last_time_grid_provide_power = self.grid_provide_power
+                    return  self.ess_provide_power, self.grid_provide_power
+                
+                else:
+                    ess_charge_power = min((ess_calculate_charge_power), (self.last_time_grid_provide_power*1.1 - load_demand))
+                    self.ess.charging_battery(ess_charge_power)
+                    self.grid_provide_power = self.grid.provide_power((ess_charge_power + load_demand))
+                    self.daytime_grid_provide_total_power += self.grid_provide_power
+                    self.ess_provide_power = - ess_charge_power
+                    self.last_time_grid_provide_power = self.grid_provide_power
+                    return  self.ess_provide_power, self.grid_provide_power
+
+
+                # ess_charge_power = min((ess_calculate_charge_power), (self.grid.max_output_power - load_demand))
+                # self.ess.charging_battery(ess_charge_power)
+                # self.grid_provide_power = self.grid.provide_power((ess_charge_power + load_demand))
+                # self.daytime_grid_provide_total_power += self.grid_provide_power
+                # self.ess_provide_power = - ess_charge_power
+                # self.last_time_grid_provide_power = self.grid_provide_power
+                # return  self.ess_provide_power, self.grid_provide_power
+            
+            elif self.ess.start_discharge_time <= self.tou.current_time < self.ess.end_discharge_time:   # 晚間電車充電時間，由電網及儲能供充電樁
+                print("目前是晚上離峰時段，儲能與電網共同放電。")
+                self.ess.change_ess_state('discharge')
+                ess_charging_time = (self.ess.end_charge_time - self.ess.start_charge_time).total_seconds() / time_cycle
+                # self.last_time_grid_provide_power = self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time))
+
+                self.if_grid_provide_power = True
+                self.grid_provide_power = (min(load_demand, self.last_time_grid_provide_power)) if load_demand > 0 else 0
+                self.if_ess_provide_power = True
+                self.ess_provide_power = load_demand - self.grid_provide_power if (load_demand > self.grid_provide_power) else 0
+                
+                if (ess.current_battery - ess.battery_discharge_limit) >= self.ess_provide_power:
+                    print("儲能系統提供電力沒變。")
+                    self.grid.provide_power(self.grid_provide_power)
+                    self.ess.discharging_battery(self.ess_provide_power)
+                    self.last_time_grid_provide_power = self.grid_provide_power
+                    return  self.ess_provide_power, self.grid_provide_power
+                
+                else:
+                    print("儲能系統提供電力有變。")
+                    self.ess_provide_power = ess.current_battery - ess.battery_discharge_limit
+                    self.grid_provide_power = load_demand - self.ess_provide_power
+                    self.grid.provide_power(self.grid_provide_power)
+                    self.ess.discharging_battery(self.ess_provide_power)
+                    self.last_time_grid_provide_power = self.grid_provide_power
+                    return  self.ess_provide_power, self.grid_provide_power
+            
+            else:
+                print("白天5~6點，電網彈性調配。")
+                self.ess.update_ess_time()
+                self.ess.change_ess_state('idle')
+                self.if_ess_provide_power = False
+                self.ess_provide_power = 0
+                self.if_grid_provide_power = True
+                self.grid_provide_power = self.grid.provide_power(load_demand)
+                return self.ess_provide_power, self.grid_provide_power
 
 
 
-time = datetime(2024, 1, 26, 0, 0)
+time = datetime(2024, 1, 29, 0, 0)
 tou = TOU(time)
 grid = Grid()
 ess = ESS(tou)
@@ -339,7 +435,7 @@ load_list = []
 
 # load = [180, 140, 100, 110, 90, 130, 160, 10, 10, 0, 0, 10, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 0]
 # 讀取包含 Load 數據的 Excel 文件
-excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\EMS_test\pile_output_result_data\pile_data_20240127_210417.xlsx"  # 替換為你的實際路徑
+excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\EMS_test\pile_output_result_data\pile_data_20240129_163453.xlsx"  # 替換為你的實際路徑
 load_data_df = pd.read_excel(excel_file_path, sheet_name='Pile total Power')  # 替換為你的Sheet名稱
 
 # 從 DataFrame 中提取 Load 數據
@@ -347,7 +443,7 @@ load = load_data_df['Pile Total Power'].tolist()
 
 num = 0
 
-while time < datetime(2024, 2, 3, 0, 0):
+while time < datetime(2024, 2, 5, 10, 0):
     tou.current_time = time
     # ess.update_ess_time()
 
@@ -361,7 +457,7 @@ while time < datetime(2024, 2, 3, 0, 0):
 
     print(f"儲能SOC：{ess.current_soc}")
     print(f"儲能當前電量：{ess.current_battery}")
-    ess_provide_power, grid_provide_power = gc.power_control_strategy1(load[num])
+    ess_provide_power, grid_provide_power = gc.power_control_strategy2(load[num])
     # print(f"儲能開始充電時間：{ess.start_charge_time}")
     # print(f"儲能結束充電時間：{ess.end_charge_time}")
     # print(f"儲能開始放電時間：{ess.start_discharge_time}")
