@@ -517,7 +517,7 @@ while time < datetime(2024, 2, 5, 10, 0):
         if ev.charge_start_time <= time:
             evcs.add_ev1(ev)
             evcs.delete_from_ev_list(ev)
-    evcs.update_ev_state_situation0(time)
+    evcs.update_ev_state_situation1(time)
 
     print(f"Time {time}")
     for idx, charging_pile in enumerate(charging_pile_status):
@@ -543,75 +543,75 @@ while time < datetime(2024, 2, 5, 10, 0):
     time += timedelta(seconds=time_cycle)
 
 # =============================================================================
-for _, ev_row in ev_data_df.iterrows():
+# for _, ev_row in ev_data_df.iterrows():
 
-    # 直接使用 to_datetime 將 Timestamp 轉換為 datetime 對象
-    start_charge_time = pd.to_datetime(ev_row['開始充電時間'])
-    end_charge_time = pd.to_datetime(ev_row['結束充電時間'])
+#     # 直接使用 to_datetime 將 Timestamp 轉換為 datetime 對象
+#     start_charge_time = pd.to_datetime(ev_row['開始充電時間'])
+#     end_charge_time = pd.to_datetime(ev_row['結束充電時間'])
 
-    # 使用轉換後的時間數據創建 EV 對象
-    ev = EV(
-        ev_row['卡片名稱'],
-        ev_row['SoC(結束)']/100,
-        ev_row['SoC(開始)']/100,
-        100,
-        start_charge_time,
-        end_charge_time
-    )
-    ev_list.append(ev)
-    evcs.add_to_ev_list(ev)
-    # 添加 EV 對象的 SOC 數據到字典中
-    ev_soc_data_dict[ev.number] = []
+#     # 使用轉換後的時間數據創建 EV 對象
+#     ev = EV(
+#         ev_row['卡片名稱'],
+#         ev_row['SoC(結束)']/100,
+#         ev_row['SoC(開始)']/100,
+#         100,
+#         start_charge_time,
+#         end_charge_time
+#     )
+#     ev_list.append(ev)
+#     evcs.add_to_ev_list(ev)
+#     # 添加 EV 對象的 SOC 數據到字典中
+#     ev_soc_data_dict[ev.number] = []
 
-time = datetime(2024, 1, 29, 0, 0)
+# time = datetime(2024, 1, 29, 0, 0)
 
-# 提取充電樁狀態
-charging_pile_status = evcs.charging_piles
+# # 提取充電樁狀態
+# charging_pile_status = evcs.charging_piles
 
-# 建立一個字典來存儲每小時每個充電樁的充電功率
-charging_power_data1 = {}
+# # 建立一個字典來存儲每小時每個充電樁的充電功率
+# charging_power_data1 = {}
 
-time_list = []
-piles_total_power1 = []
-ess_charge_discharge = []
-ess_soc = []
-grid = []
+# time_list = []
+# piles_total_power1 = []
+# ess_charge_discharge = []
+# ess_soc = []
+# grid = []
 
-for pile in charging_pile_status:
-    pile_number = pile['pile_number']
-    charging_power_data1[f"Pile {pile_number} Gun 1"] = []
-    charging_power_data1[f"Pile {pile_number} Gun 2"] = []
+# for pile in charging_pile_status:
+#     pile_number = pile['pile_number']
+#     charging_power_data1[f"Pile {pile_number} Gun 1"] = []
+#     charging_power_data1[f"Pile {pile_number} Gun 2"] = []
 
-while time < datetime(2024, 2, 5, 10, 0):
-    tou.current_time = time
-    for ev in evcs.ev_list:
-        if ev.charge_start_time <= time:
-            evcs.add_ev1(ev)
-            evcs.delete_from_ev_list(ev)
-    evcs.update_ev_state_situation1(time)
+# while time < datetime(2024, 2, 5, 10, 0):
+#     tou.current_time = time
+#     for ev in evcs.ev_list:
+#         if ev.charge_start_time <= time:
+#             evcs.add_ev1(ev)
+#             evcs.delete_from_ev_list(ev)
+#     evcs.update_ev_state_situation1(time)
 
-    print(f"Time {time}")
-    for idx, charging_pile in enumerate(charging_pile_status):
-        gun_1_power = charging_pile["gun"][0]["charging_power"]
-        gun_2_power = charging_pile["gun"][1]["charging_power"]
+#     print(f"Time {time}")
+#     for idx, charging_pile in enumerate(charging_pile_status):
+#         gun_1_power = charging_pile["gun"][0]["charging_power"]
+#         gun_2_power = charging_pile["gun"][1]["charging_power"]
 
-        pile_number = charging_pile["pile_number"]
-        charging_power_data1[f"Pile {pile_number} Gun 1"].append(gun_1_power)
-        charging_power_data1[f"Pile {pile_number} Gun 2"].append(gun_2_power)
+#         pile_number = charging_pile["pile_number"]
+#         charging_power_data1[f"Pile {pile_number} Gun 1"].append(gun_1_power)
+#         charging_power_data1[f"Pile {pile_number} Gun 2"].append(gun_2_power)
 
-    ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
-    print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
-    pile_summary, pile_total_power = evcs.get_pile_summary()
-    print(f"Pile Summary: {pile_summary}  /  Pile Total Power: {pile_total_power}")
+#     ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
+#     print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
+#     pile_summary, pile_total_power = evcs.get_pile_summary()
+#     print(f"Pile Summary: {pile_summary}  /  Pile Total Power: {pile_total_power}")
     
-    time_list.append(time)
-    piles_total_power1.append(pile_total_power)
-    for ev in ev_list:
-        ev_soc_data_dict[ev.number].append(ev.now_SOC)
+#     time_list.append(time)
+#     piles_total_power1.append(pile_total_power)
+#     for ev in ev_list:
+#         ev_soc_data_dict[ev.number].append(ev.now_SOC)
     
-    print("\n")
+#     print("\n")
 
-    time += timedelta(seconds=time_cycle)
+#     time += timedelta(seconds=time_cycle)
 # =============================================================================
 # 將數據保存到Excel文件
 # 將充電功率和SOC數據轉換為pandas DataFrame
@@ -663,12 +663,12 @@ fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
                     row_heights=[1,0]) # 設定子圖的高度比例
 
 # 添加充電功率折線圖
-# for idx, (pile, powers) in enumerate(charging_power_data.items()):
-#     fig.add_trace(go.Scatter(x=time_list, y=powers, mode='lines', name=pile, legendgroup=f"group{idx}"), row=1, col=1)
+for idx, (pile, powers) in enumerate(charging_power_data.items()):
+    fig.add_trace(go.Scatter(x=time_list, y=powers, mode='lines', name=pile, legendgroup=f"group{idx}"), row=1, col=1)
 
 # 添加充電樁總功率折線圖
 fig.add_trace(go.Scatter(x=time_list, y=piles_total_power, mode='lines', name='未導入功率控制', legendgroup=f"group{11}"), row=1, col=1)
-fig.add_trace(go.Scatter(x=time_list, y=piles_total_power1, mode='lines', name='導入功率控制', legendgroup=f"group{12}"), row=1, col=1)
+# fig.add_trace(go.Scatter(x=time_list, y=piles_total_power1, mode='lines', name='導入功率控制', legendgroup=f"group{12}"), row=1, col=1)
 
 # # 添加 SOC 折線圖
 # for ev_number, soc_data in ev_soc_data_dict.items():
