@@ -207,9 +207,11 @@ class GC:
 
         self.night_grid_provide_total_power = 0
         self.daytime_grid_provide_total_power = 0
-        self.last_time_grid_provide_power = 0
+        self.reference_grid_provide_power = 0
 
         self.grid_provide_power_factor = 1    # 電網供電功率修正係數
+        self.grid_provide_power_agnification = 1.1   # 電網供電功率放大倍率
+        self.grid_provide_power_reduction = 0.6  # 電網供電功率減少倍率
 
         self.ess = ess
         self.grid = grid
@@ -282,17 +284,17 @@ class GC:
                 self.grid_provide_power = self.grid.provide_power((ess_charge_power + load_demand))
                 self.daytime_grid_provide_total_power += self.grid_provide_power
                 self.ess_provide_power = - ess_charge_power
-                self.last_time_grid_provide_power = self.grid_provide_power
+                self.reference_grid_provide_power = self.grid_provide_power
                 return  self.ess_provide_power, self.grid_provide_power
             
             elif self.ess.start_discharge_time <= self.tou.current_time < self.ess.end_discharge_time:   # 晚間電車充電時間，由電網及儲能供充電樁
                 print("目前是晚上離峰時段，儲能與電網共同放電。")
                 self.ess.change_ess_state('discharge')
                 ess_charging_time = (self.ess.end_charge_time - self.ess.start_charge_time).total_seconds() / time_cycle
-                # self.last_time_grid_provide_power = self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time))
+                # self.reference_grid_provide_power = self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time))
 
                 self.if_grid_provide_power = True
-                self.grid_provide_power = (min(load_demand, self.last_time_grid_provide_power)) if load_demand > 0 else 0
+                self.grid_provide_power = (min(load_demand, self.reference_grid_provide_power)) if load_demand > 0 else 0
                 self.if_ess_provide_power = True
                 self.ess_provide_power = load_demand - self.grid_provide_power if (load_demand > self.grid_provide_power) else 0
                 
@@ -300,7 +302,7 @@ class GC:
                     print("儲能系統提供電力沒變。")
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess.discharging_battery(self.ess_provide_power)
-                    self.last_time_grid_provide_power = self.grid_provide_power
+                    self.reference_grid_provide_power = self.grid_provide_power
                     return  self.ess_provide_power, self.grid_provide_power
                 
                 else:
@@ -309,7 +311,7 @@ class GC:
                     self.grid_provide_power = load_demand - self.ess_provide_power
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess.discharging_battery(self.ess_provide_power)
-                    self.last_time_grid_provide_power = self.grid_provide_power
+                    self.reference_grid_provide_power = self.grid_provide_power
                     return  self.ess_provide_power, self.grid_provide_power
             
             else:
@@ -339,7 +341,7 @@ class GC:
         if self.tou_peak_hr == "尖峰":
             # 尖峰時段
             print("目前是尖峰時段，由除能供電。")
-            print(f"電網上次放電量：{self.last_time_grid_provide_power}")
+            print(f"電網上次放電量：{self.reference_grid_provide_power}")
             self.ess.change_ess_state('discharge')
             self.if_ess_provide_power = True
             self.ess_provide_power = self.ess.discharging_battery(
@@ -352,27 +354,29 @@ class GC:
             # 非尖峰時段
             if self.ess.start_charge_time <= self.tou.current_time< self.ess.end_charge_time:    # 儲能充電時間，由電網供儲能及充電樁
                 print("目前是白天離峰時段，儲能充電時間，儲能系統充電中。")
-                print(f"電網上次放電量：{self.last_time_grid_provide_power}")
+                print(f"電網上次放電量：{self.reference_grid_provide_power}")
                 self.ess.change_ess_state('charge')
                 self.if_ess_provide_power = False
                 self.ess_provide_power = 0
                 self.if_grid_provide_power = True
                 ess_calculate_charge_power = self.ess.calculate_charge_power()
 
-                if load_demand > self.last_time_grid_provide_power*1.5:
+                if load_demand > self.reference_grid_provide_power*self.grid_provide_power_agnification:     # 電網供電量大於上次放電量的1.1倍
                     self.grid_provide_power = load_demand
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess_provide_power = 0
-                    self.last_time_grid_provide_power = self.grid_provide_power
+                    if self.grid_provide_power > self.reference_grid_provide_power*self.grid_provide_power_reduction:
+                        self.reference_grid_provide_power = self.grid_provide_power
                     return  self.ess_provide_power, self.grid_provide_power
                 
                 else:
-                    ess_charge_power = min((ess_calculate_charge_power), (self.last_time_grid_provide_power*1.5 - load_demand))
+                    ess_charge_power = min((ess_calculate_charge_power), (self.reference_grid_provide_power*self.grid_provide_power_agnification - load_demand))
                     self.ess.charging_battery(ess_charge_power)
                     self.grid_provide_power = (ess_charge_power + load_demand)
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess_provide_power = - ess_charge_power
-                    self.last_time_grid_provide_power = self.grid_provide_power
+                    if self.grid_provide_power > self.reference_grid_provide_power*self.grid_provide_power_reduction:
+                        self.reference_grid_provide_power = self.grid_provide_power
                     return  self.ess_provide_power, self.grid_provide_power
 
 
@@ -381,18 +385,18 @@ class GC:
                 # self.grid_provide_power = self.grid.provide_power((ess_charge_power + load_demand))
                 # self.daytime_grid_provide_total_power += self.grid_provide_power
                 # self.ess_provide_power = - ess_charge_power
-                # self.last_time_grid_provide_power = self.grid_provide_power
+                # self.reference_grid_provide_power = self.grid_provide_power
                 # return  self.ess_provide_power, self.grid_provide_power
             
             elif self.ess.start_discharge_time <= self.tou.current_time < self.ess.end_discharge_time:   # 晚間電車充電時間，由電網及儲能供充電樁
                 print("目前是晚上離峰時段，儲能與電網共同放電。")
-                print(f"電網上次放電量：{self.last_time_grid_provide_power}")
+                print(f"電網上次放電量：{self.reference_grid_provide_power}")
                 self.ess.change_ess_state('discharge')
                 ess_charging_time = (self.ess.end_charge_time - self.ess.start_charge_time).total_seconds() / time_cycle
-                # self.last_time_grid_provide_power = self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time))
+                # self.reference_grid_provide_power = self.grid_provide_power_factor*(self.daytime_grid_provide_total_power / (ess_charging_time))
 
                 self.if_grid_provide_power = True
-                self.grid_provide_power = (min(load_demand, self.last_time_grid_provide_power)) if load_demand > 0 else 0
+                self.grid_provide_power = (min(load_demand, self.reference_grid_provide_power)) if load_demand > 0 else 0
                 self.if_ess_provide_power = True
                 self.ess_provide_power = load_demand - self.grid_provide_power if (load_demand > self.grid_provide_power) else 0
                 
@@ -400,7 +404,8 @@ class GC:
                     print("儲能系統提供電力沒變。")
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess.discharging_battery(self.ess_provide_power)
-                    self.last_time_grid_provide_power = self.grid_provide_power
+                    if self.grid_provide_power > self.reference_grid_provide_power*0.6:
+                        self.reference_grid_provide_power = self.grid_provide_power
                     return  self.ess_provide_power, self.grid_provide_power
                 
                 else:
@@ -409,12 +414,13 @@ class GC:
                     self.grid_provide_power = load_demand - self.ess_provide_power
                     self.grid.provide_power(self.grid_provide_power)
                     self.ess.discharging_battery(self.ess_provide_power)
-                    self.last_time_grid_provide_power = self.grid_provide_power
+                    if self.grid_provide_power > self.reference_grid_provide_power*0.6:
+                        self.reference_grid_provide_power = self.grid_provide_power
                     return  self.ess_provide_power, self.grid_provide_power
             
             else:
                 print("白天5~6點，電網彈性調配。")
-                print(f"電網上次放電量：{self.last_time_grid_provide_power}")
+                print(f"電網上次放電量：{self.reference_grid_provide_power}")
                 self.ess.update_ess_time()
                 self.ess.change_ess_state('idle')
                 self.if_ess_provide_power = False
@@ -448,7 +454,7 @@ load = load_data_df['Pile Total Power'].tolist()
 
 num = 0
 
-while time < datetime(2024, 1, 30, 10, 0):
+while time < datetime(2024, 2, 5, 10, 0):
     tou.current_time = time
     # ess.update_ess_time()
 
