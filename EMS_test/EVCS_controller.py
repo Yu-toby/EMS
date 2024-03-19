@@ -462,7 +462,7 @@ for _, ev_row in ev_data_df.iterrows():
     # 添加 EV 對象的 SOC 數據到字典中
     ev_soc_data_dict[ev.number] = []
 
-time = datetime(2024, 1, 29, 0, 0)
+# time = datetime(2024, 1, 29, 7, 0)
 
 # while time < datetime(2023, 12, 16, 23, 0):
 #     tou.current_time = time
@@ -511,13 +511,16 @@ for pile in charging_pile_status:
     charging_power_data[f"Pile {pile_number} Gun 1"] = []
     charging_power_data[f"Pile {pile_number} Gun 2"] = []
 
-while time < datetime(2024, 2, 5, 10, 0):
+time = datetime(2024, 1, 29, 7, 0)
+end_time = datetime(2024, 2, 5, 7, 0)   # datetime(2024, 2, 5, 10, 0)
+
+while time < end_time:   
     tou.current_time = time
     for ev in evcs.ev_list:
         if ev.charge_start_time <= time:
             evcs.add_ev1(ev)
             evcs.delete_from_ev_list(ev)
-    evcs.update_ev_state_situation1(time)
+    evcs.update_ev_state_situation0(time)
 
     print(f"Time {time}")
     for idx, charging_pile in enumerate(charging_pile_status):
@@ -541,149 +544,224 @@ while time < datetime(2024, 2, 5, 10, 0):
     print("\n")
 
     time += timedelta(seconds=time_cycle)
-
 # =============================================================================
-# for _, ev_row in ev_data_df.iterrows():
+# # 設定時間範圍和圖形標題
+# start_date = datetime(2024, 1, 29, 7, 0)
+# end_date = datetime(2024, 2, 5, 7, 0)
+# title = 'Pile Total Power'
 
-#     # 直接使用 to_datetime 將 Timestamp 轉換為 datetime 對象
-#     start_charge_time = pd.to_datetime(ev_row['開始充電時間'])
-#     end_charge_time = pd.to_datetime(ev_row['結束充電時間'])
+# # 初始化一個字典來存儲每天的數據
+# daily_data = {day: [] for day in range(1, (end_date - start_date).days + 2)}
 
-#     # 使用轉換後的時間數據創建 EV 對象
-#     ev = EV(
-#         ev_row['卡片名稱'],
-#         ev_row['SoC(結束)']/100,
-#         ev_row['SoC(開始)']/100,
-#         100,
-#         start_charge_time,
-#         end_charge_time
-#     )
-#     ev_list.append(ev)
-#     evcs.add_to_ev_list(ev)
-#     # 添加 EV 對象的 SOC 數據到字典中
-#     ev_soc_data_dict[ev.number] = []
+# # 將數據分配到對應的日期
+# for i, (time, power) in enumerate(zip(time_list, piles_total_power)):
+#     day = (time - start_date).days + 1
+#     daily_data[day].append((time, power))
 
-# time = datetime(2024, 1, 29, 0, 0)
-
-# # 提取充電樁狀態
-# charging_pile_status = evcs.charging_piles
-
-# # 建立一個字典來存儲每小時每個充電樁的充電功率
-# charging_power_data1 = {}
-
-# time_list = []
-# piles_total_power1 = []
-# ess_charge_discharge = []
-# ess_soc = []
-# grid = []
-
-# for pile in charging_pile_status:
-#     pile_number = pile['pile_number']
-#     charging_power_data1[f"Pile {pile_number} Gun 1"] = []
-#     charging_power_data1[f"Pile {pile_number} Gun 2"] = []
-
-# while time < datetime(2024, 2, 5, 10, 0):
-#     tou.current_time = time
-#     for ev in evcs.ev_list:
-#         if ev.charge_start_time <= time:
-#             evcs.add_ev1(ev)
-#             evcs.delete_from_ev_list(ev)
-#     evcs.update_ev_state_situation1(time)
-
-#     print(f"Time {time}")
-#     for idx, charging_pile in enumerate(charging_pile_status):
-#         gun_1_power = charging_pile["gun"][0]["charging_power"]
-#         gun_2_power = charging_pile["gun"][1]["charging_power"]
-
-#         pile_number = charging_pile["pile_number"]
-#         charging_power_data1[f"Pile {pile_number} Gun 1"].append(gun_1_power)
-#         charging_power_data1[f"Pile {pile_number} Gun 2"].append(gun_2_power)
-
-#     ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
-#     print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
-#     pile_summary, pile_total_power = evcs.get_pile_summary()
-#     print(f"Pile Summary: {pile_summary}  /  Pile Total Power: {pile_total_power}")
+# # 遍歷每一天並繪製圖形
+# for day, data in daily_data.items():
+#     date = start_date + timedelta(days=day-1)
     
-#     time_list.append(time)
-#     piles_total_power1.append(pile_total_power)
-#     for ev in ev_list:
-#         ev_soc_data_dict[ev.number].append(ev.now_SOC)
+#     # 提取時間和功率數據
+#     times, powers = zip(*data)
     
-#     print("\n")
-
-#     time += timedelta(seconds=time_cycle)
-# =============================================================================
-# 將數據保存到Excel文件
-# 將充電功率和SOC數據轉換為pandas DataFrame
-charging_power_df = pd.DataFrame(charging_power_data)
-pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
-illustrate_df = pd.DataFrame({'說明': evcs.excel_mark})
-
-# 將時間信息添加到 DataFrame 的第一行
-charging_power_df.insert(0, 'Time', time_list)
-pile_total_power_df.insert(0, 'Time', time_list)
-
-# 添加描述性的標題行
-pile_total_power_df.columns = ['Time', 'Pile Total Power']
-
-# 獲取腳本所在目錄的絕對路徑
-script_directory = os.path.dirname(os.path.abspath(__file__))
-
-# 獲取當前日期和時間
-current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-# 構建Excel文件的完整路徑，以日期和時間命名
-excel_file_path = os.path.join(script_directory, "pile_output_result_data", f"pile_data_{current_datetime}.xlsx")
-
-# 如果 "pile_output_result_data" 資料夾不存在，則創建它
-output_folder = os.path.join(script_directory, "pile_output_result_data")
-os.makedirs(output_folder, exist_ok=True)
-
-# 將數據保存到Excel文件
-with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
-    illustrate_df.to_excel(writer, sheet_name='說明', index=False)
-    pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
-    charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
-    # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
-
-print("Excel檔案已成功生成：charging_data.xlsx")
+#     # 繪製當天的圖形
+#     plt.figure()
+#     plt.plot(times, powers)
+#     plt.title(f'{title} - {date.date()}')
+#     plt.xlabel('Time')
+#     plt.ylabel('Pile Total Power')
+#     plt.show()
 
 # =============================================================================
-# 繪製圖表
-days = 2
-x_ticks_positions = np.arange(0, 24 * days, 1)
-x_ticks_labels = [(hr) % 24 for hr in range(24 * days)]
+for _, ev_row in ev_data_df.iterrows():
 
-# 將時間步數轉換為小時
-hours = np.arange(0, len(time_list), 1)
+    # 直接使用 to_datetime 將 Timestamp 轉換為 datetime 對象
+    start_charge_time = pd.to_datetime(ev_row['開始充電時間'])
+    end_charge_time = pd.to_datetime(ev_row['結束充電時間'])
 
-# 創建一個 subplot
-fig = make_subplots(rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.1,
-                    subplot_titles=['EV Charging Power Over a Day', 'EV SOC Over a Day'],
-                    row_heights=[1,0]) # 設定子圖的高度比例
+    # 使用轉換後的時間數據創建 EV 對象
+    ev = EV(
+        ev_row['卡片名稱'],
+        ev_row['SoC(結束)']/100,
+        ev_row['SoC(開始)']/100,
+        100,
+        start_charge_time,
+        end_charge_time
+    )
+    ev_list.append(ev)
+    evcs.add_to_ev_list(ev)
+    # 添加 EV 對象的 SOC 數據到字典中
+    ev_soc_data_dict[ev.number] = []
 
-# 添加充電功率折線圖
-for idx, (pile, powers) in enumerate(charging_power_data.items()):
-    fig.add_trace(go.Scatter(x=time_list, y=powers, mode='lines', name=pile, legendgroup=f"group{idx}"), row=1, col=1)
+# 提取充電樁狀態
+charging_pile_status = evcs.charging_piles
 
-# 添加充電樁總功率折線圖
-fig.add_trace(go.Scatter(x=time_list, y=piles_total_power, mode='lines', name='未導入功率控制', legendgroup=f"group{11}"), row=1, col=1)
-# fig.add_trace(go.Scatter(x=time_list, y=piles_total_power1, mode='lines', name='導入功率控制', legendgroup=f"group{12}"), row=1, col=1)
+# 建立一個字典來存儲每小時每個充電樁的充電功率
+charging_power_data1 = {}
 
-# # 添加 SOC 折線圖
-# for ev_number, soc_data in ev_soc_data_dict.items():
-#     fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'{ev_number} SOC', xaxis='x2'), row=2, col=1)
+time_list = []
+piles_total_power1 = []
+ess_charge_discharge = []
+ess_soc = []
+grid = []
 
-# 設定布局
-fig.update_layout(title_text='EV Charging and SOC Over a Day',
-                    xaxis_title='Time Steps (Hour)',
-                    yaxis_title='Power (W)',
-                    xaxis2_title='Time Steps (Hour)',
-                    yaxis2_title='SOC',
-                    showlegend=True,  # 顯示圖例
-                    xaxis=dict(type='category', tickmode='array', tickvals=time_list, ticktext=[str(t) for t in time_list]),
-                    barmode='group',  # stack：將柱狀圖疊加顯示；group：將柱狀圖並排顯示；overlay：將柱狀圖重疊顯示，並將透明度設為0.5
-                    bargap=0.2)  # 控制柱狀圖之間的間距
+for pile in charging_pile_status:
+    pile_number = pile['pile_number']
+    charging_power_data1[f"Pile {pile_number} Gun 1"] = []
+    charging_power_data1[f"Pile {pile_number} Gun 2"] = []
 
-# 顯示圖表
-fig.show()
+time = datetime(2024, 1, 29, 7, 0)
+end_time = datetime(2024, 2, 5, 7, 0)   # datetime(2024, 2, 5, 10, 0)
+
+while time < end_time:
+    tou.current_time = time
+    for ev in evcs.ev_list:
+        if ev.charge_start_time <= time:
+            evcs.add_ev1(ev)
+            evcs.delete_from_ev_list(ev)
+    evcs.update_ev_state_situation1(time)
+
+    print(f"Time {time}")
+    for idx, charging_pile in enumerate(charging_pile_status):
+        gun_1_power = charging_pile["gun"][0]["charging_power"]
+        gun_2_power = charging_pile["gun"][1]["charging_power"]
+
+        pile_number = charging_pile["pile_number"]
+        charging_power_data1[f"Pile {pile_number} Gun 1"].append(gun_1_power)
+        charging_power_data1[f"Pile {pile_number} Gun 2"].append(gun_2_power)
+
+    ev_soc_summary, ev_power_summary = evcs.get_ev_summary()
+    print(f"EV SOC Summary: {ev_soc_summary}  /  EV Power Summary: {ev_power_summary}")
+    pile_summary, pile_total_power = evcs.get_pile_summary()
+    print(f"Pile Summary: {pile_summary}  /  Pile Total Power: {pile_total_power}")
+    
+    time_list.append(time)
+    piles_total_power1.append(pile_total_power)
+    for ev in ev_list:
+        ev_soc_data_dict[ev.number].append(ev.now_SOC)
+    
+    print("\n")
+
+    time += timedelta(seconds=time_cycle)
+# =============================================================================
+# 設定時間範圍和圖形標題
+start_date = datetime(2024, 1, 29, 7, 0)
+end_date = datetime(2024, 2, 5, 10, 0)
+title = 'Controlled vs Uncontrolled Pile Total Power'
+
+# 初始化一個字典來存儲每天的數據
+daily_data_pile_control = {day: [] for day in range(1, (end_date - start_date).days + 2)}
+daily_data_pile_no_control = {day: [] for day in range(1, (end_date - start_date).days + 2)}
+
+# 將數據分配到對應的日期
+for i, (time, pile_power, pile_power1) in enumerate(zip(time_list, piles_total_power, piles_total_power1)):
+    day = (time - start_date).days + 1
+    daily_data_pile_control[day].append((time, pile_power))
+    daily_data_pile_no_control[day].append((time, pile_power1))
+
+# 遍歷每一天並繪製圖形
+for day, pile_data, pile_data1 in zip(daily_data_pile_control.keys(), daily_data_pile_control.values(), daily_data_pile_no_control.values()):
+    date = start_date + timedelta(days=day-1)
+    
+    # 檢查數據是否為空
+    if not pile_data or not pile_data1:
+        continue
+    
+    # 提取時間、控制後的充電樁功率和未控制的充電樁功率數據
+    times_pile, powers_pile = zip(*pile_data)
+    times_pile1, powers_pile1 = zip(*pile_data1)
+    
+    # 繪製當天的圖形
+    plt.figure()
+    plt.plot(times_pile, powers_pile, label='Controlled Pile Total Power')
+    plt.plot(times_pile1, powers_pile1, label='Uncontrolled Pile Total Power')
+    plt.title(f'{title} - {date.date()}')
+    plt.xlabel('Time')
+    plt.ylabel('Power (kW)')
+    plt.legend()
+    plt.show()
+
+# =============================================================================
+# # 將數據保存到Excel文件
+# # 將充電功率和SOC數據轉換為pandas DataFrame
+# charging_power_df = pd.DataFrame(charging_power_data)
+# pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
+# illustrate_df = pd.DataFrame({'說明': evcs.excel_mark})
+
+# # 將時間信息添加到 DataFrame 的第一行
+# charging_power_df.insert(0, 'Time', time_list)
+# pile_total_power_df.insert(0, 'Time', time_list)
+
+# # 添加描述性的標題行
+# pile_total_power_df.columns = ['Time', 'Pile Total Power']
+
+# # 獲取腳本所在目錄的絕對路徑
+# script_directory = os.path.dirname(os.path.abspath(__file__))
+
+# # 獲取當前日期和時間
+# current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+# # 構建Excel文件的完整路徑，以日期和時間命名
+# excel_file_path = os.path.join(script_directory, "pile_output_result_data", f"pile_data_{current_datetime}.xlsx")
+
+# # 如果 "pile_output_result_data" 資料夾不存在，則創建它
+# output_folder = os.path.join(script_directory, "pile_output_result_data")
+# os.makedirs(output_folder, exist_ok=True)
+
+# # 將數據保存到Excel文件
+# with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+#     illustrate_df.to_excel(writer, sheet_name='說明', index=False)
+#     pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
+#     charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
+#     # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
+
+# print("Excel檔案已成功生成：charging_data.xlsx")
+
+# =============================================================================
+# # 繪製圖表
+# days = 2
+# x_ticks_positions = np.arange(0, 24 * days, 1)
+# x_ticks_labels = [(hr) % 24 for hr in range(24 * days)]
+
+# # 將時間步數轉換為小時
+# hours = np.arange(0, len(time_list), 1)
+
+
+# # 創建一個 subplot
+# """
+# fig = make_subplots(rows=1, cols=1, shared_xaxes=True, vertical_spacing=0.1,
+#                     subplot_titles=['EV Charging Power Over a Day', 'EV SOC Over a Day'],
+#                     row_heights=[1,0]) # 設定子圖的高度比例
+# """
+
+# fig = make_subplots()
+
+# # 添加充電功率折線圖
+# # for idx, (pile, powers) in enumerate(charging_power_data.items()):
+# #     fig.add_trace(go.Scatter(x=time_list, y=powers, mode='lines', name=pile, legendgroup=f"group{idx}"), row=1, col=1)
+
+# # 添加充電樁總功率折線圖
+# fig.add_trace(go.Scatter(x=time_list, y=piles_total_power, mode='lines', name='未導入功率控制', legendgroup=f"group{11}"), row=1, col=1)
+# # fig.add_trace(go.Scatter(x=time_list, y=piles_total_power1, mode='lines', name='導入功率控制', legendgroup=f"group{12}"), row=1, col=1)
+
+# # # 添加 SOC 折線圖
+# # for ev_number, soc_data in ev_soc_data_dict.items():
+# #     fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'{ev_number} SOC', xaxis='x2'), row=2, col=1)
+
+# # 設定布局
+# fig.update_layout(title_text='EV Charging and SOC Over a Day',
+#                     xaxis_title='Time Steps (Hour)',
+#                     yaxis_title='Power (W)',
+#                     # xaxis2_title='Time Steps (Hour)',
+#                     # yaxis2_title='SOC',
+#                     showlegend=True,  # 顯示圖例
+#                     # xaxis=dict(type='category', tickmode='array', tickvals=time_list, ticktext=[t.strftime("%Y-%m-%d %H:%M") for t in time_list]),
+#                     barmode='group',  # stack：將柱狀圖疊加顯示；group：將柱狀圖並排顯示；overlay：將柱狀圖重疊顯示，並將透明度設為0.5
+#                     bargap=0.2)  # 控制柱狀圖之間的間距
+# fig.update_xaxes(tickvals=time_list,tickmode='auto')
+
+
+
+# # 顯示圖表
+# fig.show()
