@@ -322,7 +322,7 @@ class EVCS:
                             check_ev_number1 = True
                             charge_power1, charge_soc1 = ev1.calculate_charge_power(time_step)
                             charge_power1 = min(charge_power1, self.pile_power_limit)
-                            charge_soc1 = charge_power1 / ev1.battery_max_capacity
+                            # charge_soc1 = charge_power1 / ev1.battery_max_capacity
 
             else:
                 self.gun1_empty = True
@@ -343,7 +343,7 @@ class EVCS:
                             check_ev_number2 = True
                             charge_power2, charge_soc2 = ev2.calculate_charge_power(time_step)
                             charge_power2 = min(charge_power2, self.pile_power_limit)
-                            charge_soc2 = charge_power2 / ev2.battery_max_capacity
+                            # charge_soc2 = charge_power2 / ev2.battery_max_capacity
 
             else:
                 self.gun2_empty = True
@@ -359,12 +359,12 @@ class EVCS:
                 # 更新槍1的充電狀態
                 ev1.now_SOC += charge_soc1
                 ev1.now_power = ev1.now_SOC * ev1.battery_max_capacity
-                gun1['charging_power'] = round(new_charge_power1, 2)
+                gun1['charging_power'] = (new_charge_power1)
 
                 # 更新槍2的充電狀態
                 ev2.now_SOC += charge_soc2
                 ev2.now_power = ev2.now_SOC * ev2.battery_max_capacity
-                gun2['charging_power'] = round(new_charge_power2, 2)
+                gun2['charging_power'] = (new_charge_power2)
 
             else:
                 # 如果兩槍的充電功率總和沒有超過充電樁功率上限，則直接更新充電功率
@@ -372,7 +372,7 @@ class EVCS:
                     # 更新槍1的充電狀態
                     ev1.now_SOC += charge_soc1
                     ev1.now_power = ev1.now_SOC * ev1.battery_max_capacity
-                    gun1['charging_power'] = round(charge_power1, 2)
+                    gun1['charging_power'] = (charge_power1)
                 else:
                     gun1['charging_power'] = 0
 
@@ -380,7 +380,7 @@ class EVCS:
                     # 更新槍2的充電狀態
                     ev2.now_SOC += charge_soc2
                     ev2.now_power = ev2.now_SOC * ev2.battery_max_capacity
-                    gun2['charging_power'] = round(charge_power2, 2)
+                    gun2['charging_power'] = (charge_power2)
                 else:
                     gun2['charging_power'] = 0
 
@@ -429,7 +429,7 @@ tou = TOU()
 evcs = EVCS()
 
 # 讀取包含 EV 初始資料的 Excel 文件
-excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\資料生成\生成數據\original.xlsx"  
+excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\資料生成\生成數據\original改.xlsx"  
 # excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\資料生成\生成數據\generated_data.xlsx"  
 ev_data_df = pd.read_excel(excel_file_path, sheet_name='Sheet1')
 
@@ -487,10 +487,10 @@ for pile in charging_pile_status:
 # time = datetime(2024, 1, 29, 7, 0)
 # end_time = datetime(2024, 2, 5, 7, 0)   # datetime(2024, 2, 5, 10, 0)
     
-time = datetime(2023, 5, 9, 5, 35, 00)
+time = datetime(2023, 5, 9, 5, 35, 0)
 # end_time = datetime(2023, 5, 9, 7, 20) 
-# end_time = datetime(2023, 5, 10, 2, 0) 
-end_time = datetime(2023, 5, 15, 14, 0, 00) 
+end_time = datetime(2023, 5, 10, 5, 35) 
+# end_time = datetime(2023, 5, 15, 23, 0, 0) 
 
 ev_to_add = []
 
@@ -509,7 +509,7 @@ while time < end_time:
             # 如果條件不成立，則遞增索引以檢查下一個 EV
             index += 1
 
-    evcs.charging_method0(time)
+    evcs.charging_method1(time)
     # print(f"ev_charge_start_time: {ev.charge_start_time}  /  ev_charge_end_time: {ev.charge_end_time}")
 
     for idx, charging_pile in enumerate(charging_pile_status):
@@ -531,18 +531,6 @@ while time < end_time:
     
     time_list.append(time)
     piles_total_power.append(pile_total_power)
-    # if evcs.connected_evs:
-    #     for ev in evcs.connected_evs:
-    #         if ev.number == 'EAA-783':
-    #             print(f"EV {ev.number} SOC: {ev.now_SOC}  /  EV {ev.number} Power: {ev.now_power}")
-    #         ev_soc_data_dict[ev.number].append(ev.now_SOC)
-    # else:
-    #     for ev in ev_waiting_list:
-    #         if time < ev.charge_start_time:
-    #             if ev.number == 'EAA-783':
-    #                 print(f"EV {ev.number} SOC: {ev.now_SOC}  /  EV {ev.number} Power: {ev.now_power}")
-    #                 ev_soc_data_dict[ev.number].append(0)
-    #                 break
     
     pile_total += pile_total_power
     # print("\n")
@@ -578,8 +566,8 @@ fig.add_trace(go.Scatter(x=time_list, y=piles_total_power, mode='lines', name='�
 # fig.add_trace(go.Scatter(x=time_list, y=piles_total_power1, mode='lines', name='導入功率控制', legendgroup=f"group{12}"), row=1, col=1)
 
 # 添加 SOC 折線圖
-for ev_number, soc_data in ev_soc_data_dict.items():
-    fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'{ev_number} SOC', xaxis='x2'), row=1, col=1)
+# for ev_number, soc_data in ev_soc_data_dict.items():
+#     fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'{ev_number} SOC', xaxis='x2'), row=1, col=1)
 
 # 設定布局
 fig.update_layout(title_text='EV Charging and SOC Over a Day',
@@ -601,37 +589,37 @@ fig.update_xaxes(tickvals=time_list,tickmode='auto')
 # =============================================================================
 # 將數據保存到Excel文件
 # 將充電功率和SOC數據轉換為pandas DataFrame
-# charging_power_df = pd.DataFrame(charging_power_data)
-# pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
-# illustrate_df = pd.DataFrame({'說明': evcs.excel_instructions})
-# ev_list_df = pd.DataFrame({'EV List': [(ev.number, ev.charge_start_time) for ev in ev_waiting_list]})
+charging_power_df = pd.DataFrame(charging_power_data)
+pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
+illustrate_df = pd.DataFrame({'說明': evcs.excel_instructions})
+ev_list_df = pd.DataFrame({'EV List': [(ev.number, ev.charge_start_time) for ev in ev_waiting_list]})
 
-# # 將時間信息添加到 DataFrame 的第一行
-# charging_power_df.insert(0, 'Time', time_list)
-# pile_total_power_df.insert(0, 'Time', time_list)
+# 將時間信息添加到 DataFrame 的第一行
+charging_power_df.insert(0, 'Time', time_list)
+pile_total_power_df.insert(0, 'Time', time_list)
 
-# # 添加描述性的標題行
-# pile_total_power_df.columns = ['Time', 'Pile Total Power']
+# 添加描述性的標題行
+pile_total_power_df.columns = ['Time', 'Pile Total Power']
 
-# # 獲取腳本所在目錄的絕對路徑
-# script_directory = os.path.dirname(os.path.abspath(__file__))
+# 獲取腳本所在目錄的絕對路徑
+script_directory = os.path.dirname(os.path.abspath(__file__))
 
-# # 獲取當前日期和時間
-# current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+# 獲取當前日期和時間
+current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-# # 構建Excel文件的完整路徑，以日期和時間命名
-# excel_file_path = os.path.join(script_directory, "pile_output_result_data", f"pile_data_{current_datetime}.xlsx")
+# 構建Excel文件的完整路徑，以日期和時間命名
+excel_file_path = os.path.join(script_directory, "pile_output_result_data\\test", f"pile_data_{current_datetime}.xlsx")
 
-# # 如果 "pile_output_result_data" 資料夾不存在，則創建它
-# output_folder = os.path.join(script_directory, "pile_output_result_data")
-# os.makedirs(output_folder, exist_ok=True)
+# 如果 "pile_output_result_data" 資料夾不存在，則創建它
+output_folder = os.path.join(script_directory, "pile_output_result_data")
+os.makedirs(output_folder, exist_ok=True)
 
-# # 將數據保存到Excel文件
-# with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
-#     illustrate_df.to_excel(writer, sheet_name='說明', index=False)
-#     pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
-#     charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
-#     ev_list_df.to_excel(writer, sheet_name='EV List', index=False)
-#     # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
+# 將數據保存到Excel文件
+with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+    illustrate_df.to_excel(writer, sheet_name='說明', index=False)
+    pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
+    charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
+    ev_list_df.to_excel(writer, sheet_name='EV List', index=False)
+    # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
 
-# print("Excel檔案已成功生成：charging_data.xlsx")
+print("Excel檔案已成功生成：charging_data.xlsx")
