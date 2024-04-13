@@ -130,7 +130,7 @@ class EVCS:
                 guns[0]['end_time'] = ev.charge_end_time
                 guns[0]['check_charging'] = False
                 self.connected_evs.append(ev)
-                return  # 結束函式，已找到並填入 EV 資料
+                return {'state': True}  # 結束函式，已找到並填入 EV 資料
             
         # 如果沒有空的樁，則找有沒有任一隻槍沒有在用的樁
         for charging_pile in self.charging_piles:
@@ -145,7 +145,7 @@ class EVCS:
                 guns[0]['end_time'] = ev.charge_end_time
                 guns[0]['check_charging'] = False
                 self.connected_evs.append(ev)
-                return
+                return {'state': True}  # 結束函式，已找到並填入 EV 資料
             elif guns[0]['ev_number'] != 0 and guns[1]['ev_number'] == 0:
                 # 如果第二隻槍沒有在用，則填入要添加的 EV 資料
                 guns[1]['ev_number'] = ev.number
@@ -155,12 +155,13 @@ class EVCS:
                 guns[1]['end_time'] = ev.charge_end_time
                 guns[1]['check_charging'] = False
                 self.connected_evs.append(ev)
-                return
+                return  {'state': True}  # 結束函式，已找到並填入 EV 資料
             elif guns[0]['ev_number'] == ev.number or guns[1]['ev_number'] == ev.number:
                 print(f"time:{ev.charge_start_time} / {ev.number} - 該車編號已存在，請確認是否有誤")
-                return
+                return  {'state': False, 'illustrate': "資料有誤，該車編號已存在"}  # 結束函式，已找到重複的 EV 資料
             
         print(f"{ev.charge_start_time} / {ev.number}找不到可用的充電槍，請檢查充電樁狀態")
+        return  {'state': False, 'illustrate': "找不到可用的充電槍，請檢查充電樁狀態"}  
 
     def delete_ev(self, ev):
         # 逐一搜尋 charging_piles 集合中的每一個 charging_pile
