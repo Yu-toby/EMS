@@ -59,6 +59,8 @@ class EVCS:
         self.charging_piles = []
         self.gun1_empty = True
         self.gun2_empty = True
+        self.check_ev_number1 = False
+        self.check_ev_number2 = False
 
         self.excel_instructions = ['', '']
 
@@ -129,6 +131,7 @@ class EVCS:
                 guns[0]['start_time'] = ev.charge_start_time
                 guns[0]['end_time'] = ev.charge_end_time
                 guns[0]['check_charging'] = False
+                ev.gun_number = guns[0]['gun_number']
                 self.connected_evs.append(ev)
                 return {'state': True}  # 結束函式，已找到並填入 EV 資料
             
@@ -144,6 +147,7 @@ class EVCS:
                 guns[0]['start_time'] = ev.charge_start_time
                 guns[0]['end_time'] = ev.charge_end_time
                 guns[0]['check_charging'] = False
+                ev.gun_number = guns[0]['gun_number']
                 self.connected_evs.append(ev)
                 return {'state': True}  # 結束函式，已找到並填入 EV 資料
             elif guns[0]['ev_number'] != 0 and guns[1]['ev_number'] == 0:
@@ -154,6 +158,7 @@ class EVCS:
                 guns[1]['start_time'] = ev.charge_start_time
                 guns[1]['end_time'] = ev.charge_end_time
                 guns[1]['check_charging'] = False
+                ev.gun_number = guns[1]['gun_number']
                 self.connected_evs.append(ev)
                 return  {'state': True}  # 結束函式，已找到並填入 EV 資料
             elif guns[0]['ev_number'] == ev.number or guns[1]['ev_number'] == ev.number:
@@ -206,6 +211,84 @@ class EVCS:
                 total_power = sum(summary_power.values())
         return summary_power, total_power
 
+    # 判斷兩槍輸出功率是否超過充電樁供電上限(第一槍車輛number, 第二槍車輛number, 第一槍, 第二槍)
+    def if_over_pile_power_limit(self, ev_number1, ev_number2, gun1, gun2):
+            # # print(f"ev_number1: {ev_number1} / ev_number2: {ev_number2}")
+            # ev1 = self.find_ev_by_number(ev_number1)
+            # ev2 = self.find_ev_by_number(ev_number2)
+            # # print(f"ev1: {ev1} / ev2: {ev2}")
+            # # print(f"ev1_gun: {ev1.gun_number} / ev2_gun: {ev2.gun_number}")
+            # gun1 = self.charging_piles[int(ev1.gun_number.split('-')[0]) - 1]['gun'][int(ev1.gun_number.split('-')[1]) - 1]
+            # gun2 = self.charging_piles[int(ev2.gun_number.split('-')[0]) - 1]['gun'][int(ev2.gun_number.split('-')[1]) - 1]
+            # charge_power1 = ev1.charge_power
+            # charge_power2 = ev2.charge_power
+            # charge_soc1 = charge_power1 / ev1.battery_max_capacity
+            # charge_soc2 = charge_power2 / ev2.battery_max_capacity
+
+            # 從EV端取得兩槍的充電功率、充電SOC及對應的充電樁編號
+            if self.check_ev_number1:
+                ev1 = self.find_ev_by_number(ev_number1)
+                gun1 = self.charging_piles[int(ev1.gun_number.split('-')[0]) - 1]['gun'][int(ev1.gun_number.split('-')[1]) - 1]
+                charge_power1 = ev1.charge_power
+                charge_soc1 = charge_power1 / ev1.battery_max_capacity
+            else:
+                charge_power1 = 0
+                charge_soc1 = 0
+            
+            if self.check_ev_number2:
+                ev2 = self.find_ev_by_number(ev_number2)
+                gun2 = self.charging_piles[int(ev2.gun_number.split('-')[0]) - 1]['gun'][int(ev2.gun_number.split('-')[1]) - 1]
+                charge_power2 = ev2.charge_power
+                charge_soc2 = charge_power2 / ev2.battery_max_capacity
+            else:
+                charge_power2 = 0
+                charge_soc2 = 0
+
+            # 開始判斷處
+            if (charge_power1 + charge_power2) > self.pile_power_limit:
+                # 如果兩槍的充電功率總和超過充電樁功率上限
+                new_charge_power1 = min(charge_power1, (self.pile_power_limit / 2))
+                new_charge_power2 = min(charge_power2, (self.pile_power_limit / 2))
+                charge_soc1 = new_charge_power1 / ev1.battery_max_capacity
+                charge_soc2 = new_charge_power2 / ev2.battery_max_capacity
+
+                # 更新槍1的充電狀態
+                ev1.now_SOC += charge_soc1
+                ev1.now_power = ev1.now_SOC * ev1.battery_max_capacity
+                gun1['charging_power'] = (new_charge_power1)
+                gun1['charging_soc'] = charge_soc1
+
+                # 更新槍2的充電狀態
+                ev2.now_SOC += charge_soc2
+                ev2.now_power = ev2.now_SOC * ev2.battery_max_capacity
+                gun2['charging_power'] = (new_charge_power2)
+                gun2['charging_soc'] = charge_soc2
+
+            else:
+                # 如果兩槍的充電功率總和沒有超過充電樁功率上限，則直接更新充電功率
+                if self.check_ev_number1:
+                    # 更新槍1的充電狀態
+                    # ev1.now_SOC += charge_soc1
+                    # ev1.now_power = ev1.now_SOC * ev1.battery_max_capacity
+                    ev1.now_power += charge_power1
+                    ev1.now_SOC = ev1.now_power / ev1.battery_max_capacity
+                    gun1['charging_power'] = (charge_power1)
+                    gun1['charging_soc'] = charge_soc1 / ev1.battery_max_capacity
+                else:
+                    gun1['charging_power'] = 0
+                    gun1['charging_soc'] = 0
+
+                if self.check_ev_number2:
+                    # 更新槍2的充電狀態
+                    # ev2.now_SOC += charge_soc2
+                    # ev2.now_power = ev2.now_SOC * ev2.battery_max_capacity
+                    ev2.now_power += charge_power2
+                    ev2.now_SOC = ev2.now_power / ev2.battery_max_capacity
+                    gun2['charging_power'] = (charge_power2)
+                    gun2['charging_soc'] = charge_soc2 / ev2.battery_max_capacity
+                else:
+                    gun2['charging_power'] = 0
+                    gun2['charging_soc'] = 0
 
 # 充電=========================================================================
     # 最大供率充電
@@ -306,31 +389,34 @@ class EVCS:
         self.excel_instructions[1] = '平均功率充電'
         for charging_pile in self.charging_piles:
             guns = charging_pile.get('gun', [])
-            check_ev_number1, check_ev_number2 = False, False
+            self.check_ev_number1, self.check_ev_number2 = False, False
             gun1, gun2 = guns[0], guns[1]
             ev_number1, ev_number2 = gun1['ev_number'], gun2['ev_number']
+            ev_number1_gun, ev_number2_gun = gun1['gun_number'], gun2['gun_number']
             charge_power1, charge_power2, charge_soc1, charge_soc2 = 0, 0, 0, 0
             
             # 計算各槍充電功率
             if ev_number1 != 0:
                 self.gun1_empty = False
-                
                 ev1 = self.find_ev_by_number(ev_number1)
                 if ev1:
+                    # print(f"ev1: {ev1.number} / soc: {ev1.now_SOC} / target_soc: {ev1.target_SOC} / start_time: {ev1.charge_start_time} / end_time: {ev1.charge_end_time}")
                     if (ev1.now_SOC >= ev1.target_SOC) or (gun1['check_charging'] and ev1.charge_end_time <= time_step):
                         # 充完電就離開
+                        # print(f"ev1: {ev1.number} depart")
                         self.delete_ev(ev1)
-                        check_ev_number1 = False
+                        self.check_ev_number1 = False
                         charge_power1, charge_soc1 = 0, 0
                         self.gun1_empty = True
 
-                    # if (ev1.charge_start_time <= time_step < ev1.charge_end_time):
                     else:
-                        gun1['check_charging'] = True
-                        check_ev_number1 = True
-                        charge_power1, charge_soc1 = ev1.calculate_charge_power(time_step)
-                        charge_power1 = min(charge_power1, self.pile_power_limit)
-                        charge_soc1 = charge_power1 / ev1.battery_max_capacity
+                            # print(f"ev1: {ev1.number} charging")
+                            gun1['check_charging'] = True
+                            self.check_ev_number1 = True
+                            charge_power1, charge_soc1 = ev1.calculate_charge_power(time_step)
+                            charge_power1 = min(charge_power1, self.pile_power_limit)
+                            ev1.charge_power = charge_power1
+                            # charge_soc1 = charge_power1 / ev1.battery_max_capacity
 
             else:
                 self.gun1_empty = True
@@ -342,68 +428,28 @@ class EVCS:
                     if (ev2.now_SOC >= ev2.target_SOC) or (gun2['check_charging'] and ev2.charge_end_time <= time_step):
                         # 充完電就離開
                         self.delete_ev(ev2)
-                        check_ev_number2 = False
+                        self.check_ev_number2 = False
                         charge_power2, charge_soc2 = 0, 0
                         self.gun2_empty = True
 
-                    # if (ev2.charge_start_time <= time_step < ev2.charge_end_time):
                     else:
-                        gun2['check_charging'] = True
-                        check_ev_number2 = True
-                        charge_power2, charge_soc2 = ev2.calculate_charge_power(time_step)
-                        charge_power2 = min(charge_power2, self.pile_power_limit)
-                        charge_soc2 = charge_power2 / ev2.battery_max_capacity
+                            gun2['check_charging'] = True
+                            self.check_ev_number2 = True
+                            charge_power2, charge_soc2 = ev2.calculate_charge_power(time_step)
+                            charge_power2 = min(charge_power2, self.pile_power_limit)
+                            ev2.charge_power = charge_power2
+                            # charge_soc2 = charge_power2 / ev2.battery_max_capacity
 
             else:
                 self.gun2_empty = True
 
-            # 判斷兩槍輸出功率是否超過充電樁供電上限
-            if (charge_power1 + charge_power2) > self.pile_power_limit:
-                # 如果兩槍的充電功率總和超過充電樁功率上限
-                new_charge_power1 = min(charge_power1, (self.pile_power_limit / 2))
-                new_charge_power2 = min(charge_power2, (self.pile_power_limit / 2))
-                charge_soc1 = new_charge_power1 / ev1.battery_max_capacity
-                charge_soc2 = new_charge_power2 / ev2.battery_max_capacity
-
-                # 更新槍1的充電狀態
-                ev1.now_SOC += charge_soc1
-                ev1.now_power = ev1.now_SOC * ev1.battery_max_capacity
-                gun1['charging_power'] = (new_charge_power1)
-                gun1['charging_soc'] = charge_soc1
-
-                # 更新槍2的充電狀態
-                ev2.now_SOC += charge_soc2
-                ev2.now_power = ev2.now_SOC * ev2.battery_max_capacity
-                gun2['charging_power'] = (new_charge_power2)
-                gun2['charging_soc'] = charge_soc2
-
-            else:
-                # 如果兩槍的充電功率總和沒有超過充電樁功率上限，則直接更新充電功率
-                if check_ev_number1:
-                    # 更新槍1的充電狀態
-                    # ev1.now_SOC += charge_soc1
-                    # ev1.now_power = ev1.now_SOC * ev1.battery_max_capacity
-                    ev1.now_power += charge_power1
-                    ev1.now_SOC = ev1.now_power / ev1.battery_max_capacity
-                    gun1['charging_power'] = (charge_power1)
-                    gun1['charging_soc'] = charge_soc1
-                else:
-                    gun1['charging_power'] = 0
-                    gun1['charging_soc'] = 0
-
-                if check_ev_number2:
-                    # 更新槍2的充電狀態
-                    # ev2.now_SOC += charge_soc2
-                    # ev2.now_power = ev2.now_SOC * ev2.battery_max_capacity
-                    ev2.now_power += charge_power2
-                    ev2.now_SOC = ev2.now_power / ev2.battery_max_capacity
-                    gun2['charging_power'] = (charge_power2)
-                    gun2['charging_soc'] = charge_soc2
-                else:
-                    gun2['charging_power'] = 0
-                    gun2['charging_soc'] = 0
-
+            if self.check_ev_number1 or self.check_ev_number2:
+                # print(f"gun1_number: {ev_number1_gun} / gun2_number: {ev_number2_gun}")
+                self.if_over_pile_power_limit(ev_number1, ev_number2, gun1, gun2)
+        
         return self.charging_piles
+
+
     
 # 電動車=======================================================================
 class EV:
@@ -422,9 +468,9 @@ class EV:
         
         # 計算的資訊
         self.now_power = now_SOC * self.battery_max_capacity
-        self.pile_number = None  # 車輛連接的充電樁編號
+        self.gun_number = None  # 車輛連接的充電樁編號
 
-        self.charge_already_time = 0
+        self.charge_power = 0
         
         self.power_limit = power_limit
         self.charge_pi = 0  # 倍分配充電係數
