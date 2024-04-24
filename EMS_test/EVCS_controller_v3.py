@@ -9,6 +9,50 @@ import os
 kWh = 1000  # 1kWh = 1000度電
 time_cycle = 3600/60  # 1小時秒數 / 多久一筆資料的秒數(1小時一筆：3600 ；1分鐘一筆；60)
 
+# 一般判斷副程式===============================================================
+def if_Spinning_Reserve(time):
+    if datetime(2023, 5, 11, 3, 0, 0) <= time < datetime(2023, 5, 11, 4, 0, 0):   # 這裡的datetime要改成投標後的輔助服務時間
+    # if datetime(2023, 5, 15, 13, 0, 0) <= time < datetime(2023, 5, 15, 14, 0, 0):
+        return True
+    else:
+        return False
+    
+def if_Start_Charge(time, evcs, Spinning_Reserve):
+    pile_still_vacancies = {'state': True}
+    if not Spinning_Reserve:
+        index = 0
+        while index < len(evcs.ev_waiting_list):
+            ev = evcs.ev_waiting_list[index]
+            if ev.charge_start_time <= time:
+                pile_still_vacancies = evcs.add_ev1(ev)
+                # print(f"{time} - {ev.number} - {pile_still_vacancies}")
+                # evcs.add_ev1(ev)
+                if pile_still_vacancies['state']:
+                # 充電樁有空位可充電，刪除等待的 EV
+                    evcs.delete_from_ev_waiting_list(ev)
+                    # 重設迴圈的索引，讓它從頭開始
+                    index = 0
+                else:
+                    if pile_still_vacancies['type'] == 0:
+                    # 充電樁沒空位可充電
+                        evcs.add_to_ev_overtime_waiting_list(ev)
+                        # print(f"{time} - {ev.number} - {pile_still_vacancies['illustrate']}")
+                    elif pile_still_vacancies['type'] == 1:
+                    # 資料有誤，該車編號已存在
+                        print(f"{time} - {ev.number} - {pile_still_vacancies['illustrate']}")
+
+                    index += 1
+
+            else:
+                # 如果條件不成立，則遞增索引以檢查下一個 EV
+                index += 1
+    #     return pile_still_vacancies
+    return pile_still_vacancies
+    
+    # else:
+    #     print(f"{time} - Spinning_Reserve: {Spinning_Reserve}")
+
+# 時間電價===============================================================
 class TOU:
     def __init__(self, current_time=None):
         # TOU參數
@@ -50,17 +94,28 @@ class TOU:
             else:
                 return "離峰", self.non_summer_off_peak_price  # 非夏月離峰時間
 
+# 充電樁=======================================================================
 class EVCS:
     def __init__(self):
         self.pile_power_limit = 100 * 1000
         self.connected_evs = []
         self.ev_waiting_list = []
+        self.ev_overtime_waiting_list = []
         piles_amount = 5
         self.charging_piles = []
         self.gun1_empty = True
         self.gun2_empty = True
         self.check_ev_number1 = False
         self.check_ev_number2 = False
+
+        # ------------------------------------------------------
+        self.set_time = False
+        self.waiting_start_charge_time = 0
+        self.half_power_start_charge_time = 0
+        self.full_power_start_charge_time = 0
+
+        self.half_power_end_charge_time = 0
+        self.full_power_end_charge_time = 0
 
         self.excel_instructions = ['', '']
 
@@ -90,6 +145,14 @@ class EVCS:
     
     def delete_from_ev_waiting_list(self, ev):
         self.ev_waiting_list.remove(ev)
+
+# 增減等待(超時還沒充電)的車輛========================================================= 
+    def add_to_ev_overtime_waiting_list(self, ev):
+        self.ev_overtime_waiting_list.append(ev)
+
+    def delete_from_ev_overtime_waiting_list(self, ev):
+        self.ev_overtime_waiting_list.remove(ev)
+
 # 找空位充電===================================================================
     # 照順序1-1, 1-2找空的槍
     def add_ev0(self, ev):   
@@ -163,10 +226,10 @@ class EVCS:
                 return  {'state': True}  # 結束函式，已找到並填入 EV 資料
             elif guns[0]['ev_number'] == ev.number or guns[1]['ev_number'] == ev.number:
                 print(f"time:{ev.charge_start_time} / {ev.number} - 該車編號已存在，請確認是否有誤")
-                return  {'state': False, 'illustrate': "資料有誤，該車編號已存在"}  # 結束函式，已找到重複的 EV 資料
+                return  {'state': False, 'type': 1, 'illustrate': "資料有誤，該車編號已存在"}  # 結束函式，已找到重複的 EV 資料
             
-        print(f"{ev.charge_start_time} / {ev.number}找不到可用的充電槍，請檢查充電樁狀態")
-        return  {'state': False, 'illustrate': "找不到可用的充電槍，請檢查充電樁狀態"}  
+        # print(f"{ev.charge_start_time} / {ev.number}找不到可用的充電槍，請檢查充電樁狀態")
+        return  {'state': False, 'type': 0, 'illustrate': "找不到可用的充電槍，請檢查充電樁狀態"}  
 
     def delete_ev(self, ev):
         # 逐一搜尋 charging_piles 集合中的每一個 charging_pile
@@ -212,7 +275,7 @@ class EVCS:
         return summary_power, total_power
 
     # 判斷兩槍輸出功率是否超過充電樁供電上限(第一槍車輛number, 第二槍車輛number, 第一槍, 第二槍)
-    def if_over_pile_power_limit(self, ev_number1, ev_number2, gun1, gun2):
+    def if_over_pile_power_limit(self, ev_number1, ev_number2, gun1, gun2, Spinning_Reserve, pile_total_power_rate):
             # # print(f"ev_number1: {ev_number1} / ev_number2: {ev_number2}")
             # ev1 = self.find_ev_by_number(ev_number1)
             # ev2 = self.find_ev_by_number(ev_number2)
@@ -225,7 +288,7 @@ class EVCS:
             # charge_soc1 = charge_power1 / ev1.battery_max_capacity
             # charge_soc2 = charge_power2 / ev2.battery_max_capacity
 
-            # 從EV端取得兩槍的充電功率、充電SOC及對應的充電樁編號
+            # 從EV端取得兩槍的充電功率、充電SOC及對應的充電樁編號=======================================
             if self.check_ev_number1:
                 ev1 = self.find_ev_by_number(ev_number1)
                 gun1 = self.charging_piles[int(ev1.gun_number.split('-')[0]) - 1]['gun'][int(ev1.gun_number.split('-')[1]) - 1]
@@ -244,11 +307,12 @@ class EVCS:
                 charge_power2 = 0
                 charge_soc2 = 0
 
-            # 開始判斷處
+            # 開始判斷處============================================================================
             if (charge_power1 + charge_power2) > self.pile_power_limit:
                 # 如果兩槍的充電功率總和超過充電樁功率上限
-                new_charge_power1 = min(charge_power1, (self.pile_power_limit / 2))
-                new_charge_power2 = min(charge_power2, (self.pile_power_limit / 2))
+                # 依據當下是否為即時備轉服務時間，計算充電功率。若為即時備轉服務時間，則充電功率會乘上[(充電樁總功率 - 100k) / 充電樁總功率]。(100k 為投標量)
+                new_charge_power1 = min(charge_power1, (self.pile_power_limit / 2)) if not Spinning_Reserve else (min(charge_power1, (self.pile_power_limit / 2))) * ((pile_total_power_rate - 100000) / pile_total_power_rate)
+                new_charge_power2 = min(charge_power2, (self.pile_power_limit / 2)) if not Spinning_Reserve else (min(charge_power2, (self.pile_power_limit / 2))) * ((pile_total_power_rate - 100000) / pile_total_power_rate)
                 charge_soc1 = new_charge_power1 / ev1.battery_max_capacity
                 charge_soc2 = new_charge_power2 / ev2.battery_max_capacity
 
@@ -289,6 +353,13 @@ class EVCS:
                 else:
                     gun2['charging_power'] = 0
                     gun2['charging_soc'] = 0
+
+    def charge_time(self, start_soc, target_soc, battery_max_capacity, charge_power):
+        # 計算充電時間
+        minute = (target_soc - start_soc) * battery_max_capacity / charge_power
+        charge_time = timedelta(minutes=minute)
+        # print(f"charge_time: {charge_time}")
+        return charge_time
 
 # 充電=========================================================================
     # 最大供率充電
@@ -385,7 +456,8 @@ class EVCS:
         return self.charging_piles
 
     # 平均功率充電
-    def charging_method1(self, time_step):
+    def charging_method1(self, time_step, Spinning_Reserve, pile_total_power_rate):
+        # print(f"if_pile_still_vacancies: {if_pile_still_vacancies}")
         self.excel_instructions[1] = '平均功率充電'
         for charging_pile in self.charging_piles:
             guns = charging_pile.get('gun', [])
@@ -413,8 +485,9 @@ class EVCS:
                             # print(f"ev1: {ev1.number} charging")
                             gun1['check_charging'] = True
                             self.check_ev_number1 = True
-                            charge_power1, charge_soc1 = ev1.calculate_charge_power(time_step)
-                            charge_power1 = min(charge_power1, self.pile_power_limit)
+                            charge_power1, charge_soc1 = ev1.calculate_charge_power(time_step, Spinning_Reserve)
+                            # 依據當下是否為即時備轉服務時間，計算充電功率。若為即時備轉服務時間，則充電功率會乘上[(充電樁總功率 - 100k) / 充電樁總功率]。(100k 為投標量)
+                            charge_power1 = min(charge_power1, self.pile_power_limit) if not Spinning_Reserve else (min(charge_power1, self.pile_power_limit)) * ((pile_total_power_rate - 100000) / pile_total_power_rate)
                             ev1.charge_power = charge_power1
                             # charge_soc1 = charge_power1 / ev1.battery_max_capacity
 
@@ -435,8 +508,9 @@ class EVCS:
                     else:
                             gun2['check_charging'] = True
                             self.check_ev_number2 = True
-                            charge_power2, charge_soc2 = ev2.calculate_charge_power(time_step)
-                            charge_power2 = min(charge_power2, self.pile_power_limit)
+                            charge_power2, charge_soc2 = ev2.calculate_charge_power(time_step, Spinning_Reserve)
+                            # 依據當下是否為即時備轉服務時間，計算充電功率。若為即時備轉服務時間，則充電功率會乘上[(充電樁總功率 - 100k) / 充電樁總功率]。(100k 為投標量)
+                            charge_power2 = min(charge_power2, self.pile_power_limit) if not Spinning_Reserve else (min(charge_power2, self.pile_power_limit)) * ((pile_total_power_rate - 100000) / pile_total_power_rate)
                             ev2.charge_power = charge_power2
                             # charge_soc2 = charge_power2 / ev2.battery_max_capacity
 
@@ -445,8 +519,110 @@ class EVCS:
 
             if self.check_ev_number1 or self.check_ev_number2:
                 # print(f"gun1_number: {ev_number1_gun} / gun2_number: {ev_number2_gun}")
-                self.if_over_pile_power_limit(ev_number1, ev_number2, gun1, gun2)
+                self.if_over_pile_power_limit(ev_number1, ev_number2, gun1, gun2, Spinning_Reserve, pile_total_power_rate)
+
+        return self.charging_piles
+
+    # 平均功率充電
+    def charging_method2(self, time_step, Spinning_Reserve, pile_total_power_rate, if_pile_still_vacancies):
+        # print(f"if_pile_still_vacancies: {if_pile_still_vacancies}")
+        if if_pile_still_vacancies:
+            self.set_time = False
+            self.excel_instructions[1] = '平均功率充電'
+            for charging_pile in self.charging_piles:
+                guns = charging_pile.get('gun', [])
+                self.check_ev_number1, self.check_ev_number2 = False, False
+                gun1, gun2 = guns[0], guns[1]
+                ev_number1, ev_number2 = gun1['ev_number'], gun2['ev_number']
+                ev_number1_gun, ev_number2_gun = gun1['gun_number'], gun2['gun_number']
+                charge_power1, charge_power2, charge_soc1, charge_soc2 = 0, 0, 0, 0
+                
+                # 計算各槍充電功率
+                if ev_number1 != 0:
+                    self.gun1_empty = False
+                    ev1 = self.find_ev_by_number(ev_number1)
+                    if ev1:
+                        # print(f"ev1: {ev1.number} / soc: {ev1.now_SOC} / target_soc: {ev1.target_SOC} / start_time: {ev1.charge_start_time} / end_time: {ev1.charge_end_time}")
+                        if (ev1.now_SOC >= ev1.target_SOC) or (gun1['check_charging'] and ev1.charge_end_time <= time_step):
+                            # 充完電就離開
+                            # print(f"ev1: {ev1.number} depart")
+                            self.delete_ev(ev1)
+                            self.check_ev_number1 = False
+                            charge_power1, charge_soc1 = 0, 0
+                            self.gun1_empty = True
+
+                        else:
+                                # print(f"ev1: {ev1.number} charging")
+                                gun1['check_charging'] = True
+                                self.check_ev_number1 = True
+                                charge_power1, charge_soc1 = ev1.calculate_charge_power(time_step, Spinning_Reserve)
+                                # 依據當下是否為即時備轉服務時間，計算充電功率。若為即時備轉服務時間，則充電功率會乘上[(充電樁總功率 - 100k) / 充電樁總功率]。(100k 為投標量)
+                                charge_power1 = min(charge_power1, self.pile_power_limit) if not Spinning_Reserve else (min(charge_power1, self.pile_power_limit)) * ((pile_total_power_rate - 100000) / pile_total_power_rate)
+                                ev1.charge_power = charge_power1
+                                # charge_soc1 = charge_power1 / ev1.battery_max_capacity
+
+                else:
+                    self.gun1_empty = True
+
+                if ev_number2 != 0:
+                    self.gun2_empty = False
+                    ev2 = self.find_ev_by_number(ev_number2)
+                    if ev2:
+                        if (ev2.now_SOC >= ev2.target_SOC) or (gun2['check_charging'] and ev2.charge_end_time <= time_step):
+                            # 充完電就離開
+                            self.delete_ev(ev2)
+                            self.check_ev_number2 = False
+                            charge_power2, charge_soc2 = 0, 0
+                            self.gun2_empty = True
+
+                        else:
+                                gun2['check_charging'] = True
+                                self.check_ev_number2 = True
+                                charge_power2, charge_soc2 = ev2.calculate_charge_power(time_step, Spinning_Reserve)
+                                # 依據當下是否為即時備轉服務時間，計算充電功率。若為即時備轉服務時間，則充電功率會乘上[(充電樁總功率 - 100k) / 充電樁總功率]。(100k 為投標量)
+                                charge_power2 = min(charge_power2, self.pile_power_limit) if not Spinning_Reserve else (min(charge_power2, self.pile_power_limit)) * ((pile_total_power_rate - 100000) / pile_total_power_rate)
+                                ev2.charge_power = charge_power2
+                                # charge_soc2 = charge_power2 / ev2.battery_max_capacity
+
+                else:
+                    self.gun2_empty = True
+
+                if self.check_ev_number1 or self.check_ev_number2:
+                    # print(f"gun1_number: {ev_number1_gun} / gun2_number: {ev_number2_gun}")
+                    self.if_over_pile_power_limit(ev_number1, ev_number2, gun1, gun2, Spinning_Reserve, pile_total_power_rate)
         
+        else:
+            # print(f"{time_step} - charging - {if_pile_still_vacancies}")
+            # --------------------------------------------------------------------------------------------
+            earliest_end_time = datetime.max    # 預設最早結束充電時間為無限大
+            overtime_waiting_ev_amount = 0  # 超時車輛數
+            # 找出等待區內充電時間已到，但因為沒空槍而無法充電的車輛中，若用最大功率充電，最晚要開始充電的時間
+            for ev in self.ev_waiting_list:
+                if ev.charge_start_time <= time_step:
+                    overtime_waiting_ev_amount += 1
+                    if ev.charge_end_time < earliest_end_time:
+                        earliest_end_time = ev.charge_end_time
+                        self.half_power_start_charge_time = ev.charge_end_time - self.charge_time(ev.now_SOC, ev.target_SOC, ev.battery_max_capacity, 50*1000)
+                        self.full_power_start_charge_time = ev.charge_end_time - self.charge_time(ev.now_SOC, ev.target_SOC, ev.battery_max_capacity, 100*1000)
+            # print(f"half_power_start_charge_time: {self.half_power_start_charge_time} / full_power_start_charge_time: {self.full_power_start_charge_time}")
+            # self.waiting_start_charge_time = earliest_end_time
+            # --------------------------------------------------------------------------------------------
+            if self.set_time == False:
+                least_soc_demand = 101
+                # 找出場域內需提早完成充電車輛中，若用最大功率充電，最早可結束充電的時間
+                # 使用 lambda 函數定義排序規則，按照 (target_SOC - now_SOC) 的大小進行排序
+                sorted_evs = sorted(self.connected_evs, key=lambda ev: ev.target_SOC - ev.now_SOC)
+                # 獲取前三個元素
+                top_few_evs = sorted_evs[:overtime_waiting_ev_amount]
+                print(f"top_few_evs: {[ev.number for ev in top_few_evs]}")
+                for field_ev in top_few_evs:
+                    if field_ev.target_SOC - field_ev.now_SOC < least_soc_demand:
+                        least_soc_demand = field_ev.target_SOC - field_ev.now_SOC
+                        self.half_power_end_charge_time = (time_step + self.charge_time(field_ev.now_SOC, field_ev.target_SOC, field_ev.battery_max_capacity, 50*1000))
+                        self.full_power_end_charge_time = (time_step + self.charge_time(field_ev.now_SOC, field_ev.target_SOC, field_ev.battery_max_capacity, 100*1000))
+                        self.set_time = True
+                    print(f"half_power_end_charge_time: {self.half_power_end_charge_time} / full_power_end_charge_time: {self.full_power_end_charge_time}")
+
         return self.charging_piles
 
 
@@ -471,11 +647,12 @@ class EV:
         self.gun_number = None  # 車輛連接的充電樁編號
 
         self.charge_power = 0
+        self.charge_power_rate = 0
         
         self.power_limit = power_limit
         self.charge_pi = 0  # 倍分配充電係數
 
-    def calculate_charge_power(self, current_time):
+    def calculate_charge_power(self, current_time, Spinning_Reserve):
         # 計算每小時所需充電功率
         if self.charge_start_time <= current_time < self.charge_end_time:
             # 每小時/每分鐘 充多少SOC，看time_cycle決定
@@ -484,24 +661,26 @@ class EV:
                 charge_soc = ((self.target_SOC - self.now_SOC)) / int((self.charge_end_time - current_time).total_seconds() / time_cycle)
             except ZeroDivisionError:
                 charge_soc = 0
-            # charge_soc = (((self.target_SOC - self.now_SOC)) /((self.charge_end_time - current_time).total_seconds() / time_cycle))
             # 每個時刻充電功率(W)
             charge_power = charge_soc * self.battery_max_capacity
         else:
             charge_power = 0
             charge_soc = 0
-        # if self.number == 'EAA-780':
-        #     print(f"now_soc: {self.now_SOC} / target_soc: {self.target_SOC}  / charging_time: {int((self.charge_end_time - current_time).total_seconds() / time_cycle)}  /  Charge Power: {charge_power}  /  Charge SOC: {charge_soc}")
-        return charge_power, charge_soc # 回傳 充電功率(W)、充多少SOC
-    
 
-# 主程式=======================================================================
+        if not Spinning_Reserve:    # 非即時備轉服務時間，充電功率會一直計算
+            self.charge_power_rate = charge_power
+            return charge_power, charge_soc # 回傳 充電功率(W)、充多少SOC
+        else:   # 即時備轉服務時間，充電功率會直接以最後一筆計算值輸出
+            return self.charge_power_rate, charge_soc # 回傳 充電功率(W)、充多少SOC
+
+
+# 初始資料建構=======================================================================
 tou = TOU()
 evcs = EVCS()
 
-# 讀取包含 EV 初始資料的 Excel 文件
-excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\資料生成\生成數據\original_end時間有改.xlsx"  
-# excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\資料生成\生成數據\generated_data.xlsx"  
+# Excel 讀取 EV 初始資料=======================================================
+# excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\資料生成\生成數據\original_end時間有改.xlsx"  
+excel_file_path = r"C:\Users\WYC\Desktop\電動大巴\EMS\EMS\資料生成\生成數據\original_車多於樁.xlsx"  
 ev_data_df = pd.read_excel(excel_file_path, sheet_name='Sheet1')
 
 # 創建一個空的列表，用於存儲所有 EV 對象
@@ -536,8 +715,7 @@ for _, ev_row in ev_data_df.iterrows():
         ev_soc_data_dict[ev.number] = []
         ev_soc_data_dict[ev.number].append(0)
 
-# =============================================================================
-# 提取充電樁狀態
+# 提取充電樁狀態=============================================================================
 charging_pile_status = evcs.charging_piles
 
 # 建立一個字典來存儲每小時每個充電樁的充電功率
@@ -559,34 +737,57 @@ for pile in charging_pile_status:
     charging_power_data[f"{pile_number}-2-EV"] = []
     charging_power_data[f"{pile_number}-2-EV-SOC"] = []
 
+# 主程式=============================================================================
 # time = datetime(2024, 1, 29, 7, 0)
 # end_time = datetime(2024, 2, 5, 7, 0)   # datetime(2024, 2, 5, 10, 0)
-    
-# time = datetime(2023, 5, 9, 5, 35, 0)
-# end_time = datetime(2023, 5, 10, 5, 35) 
-time = datetime(2023, 5, 9, 4, 00, 0)
-end_time = datetime(2023, 5, 15, 16, 0, 0) 
 
-ev_to_add = []
+Draw = False
+# Draw = True
+Export_file = False
+# Export_file = True
+
+time = datetime(2023, 5, 9, 5, 35, 0)
+end_time = datetime(2023, 5, 10, 5, 35) 
+
+# time = datetime(2023, 5, 9, 4, 0, 0)
+# end_time = datetime(2023, 5, 15, 16, 0, 0) 
+
+Spinning_Reserve = False    # 是否為即時備轉服務時間
+pile_total_power = 0
+pile_total_power_rate = 0
 # print(f"ev_soc_data_dict: {ev_soc_data_dict}")
 
 while time < end_time:   
     # print(f"Time {time}")
     tou.current_time = time
-    index = 0
-    while index < len(evcs.ev_waiting_list):
-        ev = evcs.ev_waiting_list[index]
-        if ev.charge_start_time <= time:
-            evcs.add_ev1(ev)
-            evcs.delete_from_ev_waiting_list(ev)
-            # 重設迴圈的索引，讓它從頭開始
-            index = 0
-        else:
-            # 如果條件不成立，則遞增索引以檢查下一個 EV
-            index += 1
 
-    evcs.charging_method1(time)
+    # 判斷是否為即時備轉服務時間
+    Spinning_Reserve = if_Spinning_Reserve(time)
+    if not Spinning_Reserve:
+        pile_total_power_rate = pile_total_power
+        # print(f"pile_total_power_rate: {pile_total_power_rate}")
+    else:
+        print(f"{time} - pile_total_power_rate: {pile_total_power_rate}")
+
+    # 判斷等待區車輛充電時間是否到達，若到達則加入充電樁
+    if_pile_still_vacancies = if_Start_Charge(time, evcs, Spinning_Reserve)
+
+    # 車輛充電
+    # if not if_pile_still_vacancies['state']:
+    #     if if_pile_still_vacancies['type'] == 0:
+    #         print(f"{time} - {if_pile_still_vacancies['illustrate']}")
+    #     elif if_pile_still_vacancies['type'] == 1:
+    #         print(f"{time} - {if_pile_still_vacancies['illustrate']}")
+    #     # evcs.charging_method1(time, Spinning_Reserve, pile_total_power_rate)
+    # else:
+        # evcs.charging_method1(time, Spinning_Reserve, pile_total_power_rate)
+    # evcs.charging_method1(time, Spinning_Reserve, pile_total_power_rate)
+
+    # print(f"{time} - if_pile_still_vacancies: {if_pile_still_vacancies['state']}")
+    evcs.charging_method2(time, Spinning_Reserve, pile_total_power_rate, if_pile_still_vacancies['state'])
     # print(f"ev_charge_start_time: {ev.charge_start_time}  /  ev_charge_end_time: {ev.charge_end_time}")
+    
+    # 紀錄充電時，各槍的資訊=============================================================================
     charging_evs = []
     for idx, charging_pile in enumerate(charging_pile_status):
         gun_1_power = charging_pile["gun"][0]["charging_power"]
@@ -605,6 +806,7 @@ while time < end_time:
         charging_power_data[f"{pile_number}-2"].append(gun_2_power)
         charging_power_data[f"{pile_number}-2-EV-SOC"].append(ev_2_soc)
 
+        # 紀錄車輛充電時的SOC
         if ev_1_number != 0:
             charging_evs.append(ev_1_number)
             # ev_1_soc = evcs.find_ev_by_number(ev_1_number).now_SOC
@@ -614,6 +816,7 @@ while time < end_time:
             # ev_2_soc = evcs.find_ev_by_number(ev_2_number).now_SOC
             ev_soc_data_dict[ev_2_number].append(ev_2_soc)
 
+    # 紀錄車輛從時間開始到結束的SOC======================================================================
     for ev in ev_soc_data_dict:
         if ev not in charging_evs:
             ev_soc_data_dict[ev].append(ev_soc_data_dict[ev][-1])
@@ -633,7 +836,7 @@ while time < end_time:
     # print("\n")
 
     time += timedelta(seconds=time_cycle)
-
+"""
 # 跑第二遍=============================================================================
 # # 將 EV 初始資料從 DataFrame 中讀取
 # for _, ev_row in ev_data_df.iterrows():
@@ -746,88 +949,90 @@ while time < end_time:
 #     # print("\n")
 
 #     time += timedelta(seconds=time_cycle)
-
+"""
 # 繪製圖表=====================================================================
-days = 2
-x_ticks_positions = np.arange(0, 24 * days, 1)
-x_ticks_labels = [(hr) % 24 for hr in range(24 * days)]
+if Draw:
+    days = 2
+    x_ticks_positions = np.arange(0, 24 * days, 1)
+    x_ticks_labels = [(hr) % 24 for hr in range(24 * days)]
 
-# 將時間步數轉換為小時
-hours = np.arange(0, len(time_list), 1)
-
-
-# 創建一個 subplot
-"""
-fig = make_subplots(rows=1, cols=1, shared_xaxes=True, vertical_spacing=0.1,
-                    subplot_titles=['EV Charging Power Over a Day', 'EV SOC Over a Day'],
-                    row_heights=[1,0]) # 設定子圖的高度比例
-"""
-
-fig = make_subplots(rows=2, cols=1)
-
-# 添加充電功率折線圖
-# for idx, (pile, powers) in enumerate(charging_power_data.items()):
-#     fig.add_trace(go.Scatter(x=time_list, y=powers, mode='lines', name=pile, legendgroup=f"group{idx}"), row=1, col=1)
-
-# 添加充電樁總功率折線圖
-fig.add_trace(go.Scatter(x=time_list, y=piles_total_power, mode='lines', name='未導入功率控制', legendgroup=f"group{11}"), row=1, col=1)
-# fig.add_trace(go.Scatter(x=time_list, y=piles_total_power1, mode='lines', name='導入功率控制', legendgroup=f"group{12}"), row=1, col=1)
-
-# 添加 SOC 折線圖
-for ev_number, soc_data in ev_soc_data_dict.items():
-    fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'{ev_number} SOC', xaxis='x2'), row=2, col=1)
-
-# 設定布局
-fig.update_layout(title_text='EV Charging and SOC Over a Day',
-                    xaxis_title='Time Steps (Hour)',
-                    yaxis_title='Power (W)',
-                    xaxis2_title='Time Steps (Hour)',
-                    yaxis2_title='SOC',
-                    showlegend=True,  # 顯示圖例
-                    # xaxis=dict(type='category', tickmode='array', tickvals=time_list, ticktext=[t.strftime("%Y-%m-%d %H:%M") for t in time_list]),
-                    barmode='group',  # stack：將柱狀圖疊加顯示；group：將柱狀圖並排顯示；overlay：將柱狀圖重疊顯示，並將透明度設為0.5
-                    bargap=0.2)  # 控制柱狀圖之間的間距
-fig.update_xaxes(tickvals=time_list,tickmode='auto')
+    # 將時間步數轉換為小時
+    hours = np.arange(0, len(time_list), 1)
 
 
+    # 創建一個 subplot
+    """
+    fig = make_subplots(rows=1, cols=1, shared_xaxes=True, vertical_spacing=0.1,
+                        subplot_titles=['EV Charging Power Over a Day', 'EV SOC Over a Day'],
+                        row_heights=[1,0]) # 設定子圖的高度比例
+    """
 
-# 顯示圖表
-fig.show()
+    fig = make_subplots(rows=2, cols=1)
+
+    # 添加充電功率折線圖
+    # for idx, (pile, powers) in enumerate(charging_power_data.items()):
+    #     fig.add_trace(go.Scatter(x=time_list, y=powers, mode='lines', name=pile, legendgroup=f"group{idx}"), row=1, col=1)
+
+    # 添加充電樁總功率折線圖
+    fig.add_trace(go.Scatter(x=time_list, y=piles_total_power, mode='lines', name='未導入功率控制', legendgroup=f"group{11}"), row=1, col=1)
+    # fig.add_trace(go.Scatter(x=time_list, y=piles_total_power1, mode='lines', name='導入功率控制', legendgroup=f"group{12}"), row=1, col=1)
+
+    # 添加 SOC 折線圖
+    for ev_number, soc_data in ev_soc_data_dict.items():
+        fig.add_trace(go.Scatter(x=time_list, y=soc_data, mode='lines', name=f'{ev_number} SOC', xaxis='x2'), row=2, col=1)
+
+    # 設定布局
+    fig.update_layout(title_text='EV Charging and SOC Over a Day',
+                        xaxis_title='Time Steps (Hour)',
+                        yaxis_title='Power (W)',
+                        xaxis2_title='Time Steps (Hour)',
+                        yaxis2_title='SOC',
+                        showlegend=True,  # 顯示圖例
+                        # xaxis=dict(type='category', tickmode='array', tickvals=time_list, ticktext=[t.strftime("%Y-%m-%d %H:%M") for t in time_list]),
+                        barmode='group',  # stack：將柱狀圖疊加顯示；group：將柱狀圖並排顯示；overlay：將柱狀圖重疊顯示，並將透明度設為0.5
+                        bargap=0.2)  # 控制柱狀圖之間的間距
+    fig.update_xaxes(tickvals=time_list,tickmode='auto')
+
+
+
+    # 顯示圖表
+    fig.show()
 
 # =============================================================================
-# 將數據保存到Excel文件
-# 將充電功率和SOC數據轉換為pandas DataFrame
-# charging_power_df = pd.DataFrame(charging_power_data)
-# pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
-# illustrate_df = pd.DataFrame({'說明': evcs.excel_instructions})
-# # ev_list_df = pd.DataFrame({'EV List': [(ev.number, ev.charge_start_time) for ev in ev_waiting_list]})
+if Export_file:
+    # 將數據保存到Excel文件
+    # 將充電功率和SOC數據轉換為pandas DataFrame
+    charging_power_df = pd.DataFrame(charging_power_data)
+    pile_total_power_df = pd.DataFrame({'Pile Total Power': piles_total_power})
+    illustrate_df = pd.DataFrame({'說明': evcs.excel_instructions})
+    # ev_list_df = pd.DataFrame({'EV List': [(ev.number, ev.charge_start_time) for ev in ev_waiting_list]})
 
-# # 將時間信息添加到 DataFrame 的第一行
-# charging_power_df.insert(0, 'Time', time_list)
-# pile_total_power_df.insert(0, 'Time', time_list)
+    # 將時間信息添加到 DataFrame 的第一行
+    charging_power_df.insert(0, 'Time', time_list)
+    pile_total_power_df.insert(0, 'Time', time_list)
 
-# # 添加描述性的標題行
-# pile_total_power_df.columns = ['Time', 'Pile Total Power']
+    # 添加描述性的標題行
+    pile_total_power_df.columns = ['Time', 'Pile Total Power']
 
-# # 獲取腳本所在目錄的絕對路徑
-# script_directory = os.path.dirname(os.path.abspath(__file__))
+    # 獲取腳本所在目錄的絕對路徑
+    script_directory = os.path.dirname(os.path.abspath(__file__))
 
-# # 獲取當前日期和時間
-# current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # 獲取當前日期和時間
+    current_datetime = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-# # 構建Excel文件的完整路徑，以日期和時間命名
-# excel_file_path = os.path.join(script_directory, "pile_output_result_data\\test", f"pile_data_{current_datetime}.xlsx")
+    # 構建Excel文件的完整路徑，以日期和時間命名
+    excel_file_path = os.path.join(script_directory, "pile_output_result_data\\test", f"pile_data_{current_datetime}.xlsx")
 
-# # 如果 "pile_output_result_data" 資料夾不存在，則創建它
-# output_folder = os.path.join(script_directory, "pile_output_result_data")
-# os.makedirs(output_folder, exist_ok=True)
+    # 如果 "pile_output_result_data" 資料夾不存在，則創建它
+    output_folder = os.path.join(script_directory, "pile_output_result_data")
+    os.makedirs(output_folder, exist_ok=True)
 
-# # 將數據保存到Excel文件
-# with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
-#     illustrate_df.to_excel(writer, sheet_name='說明', index=False)
-#     pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
-#     charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
-#     # ev_list_df.to_excel(writer, sheet_name='EV List', index=False)
-#     # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
+    # 將數據保存到Excel文件
+    with pd.ExcelWriter(excel_file_path, engine='openpyxl') as writer:
+        illustrate_df.to_excel(writer, sheet_name='說明', index=False)
+        pile_total_power_df.to_excel(writer, sheet_name='Pile total Power', index=False)
+        charging_power_df.to_excel(writer, sheet_name='Charging Power', index=False)
+        # ev_list_df.to_excel(writer, sheet_name='EV List', index=False)
+        # ev_soc_df.to_excel(writer, sheet_name='EV SOC', index=False)
 
-# print("Excel檔案已成功生成：charging_data.xlsx")
+    print("Excel檔案已成功生成：charging_data.xlsx")
