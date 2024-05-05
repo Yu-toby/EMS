@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 import os
 
+
 kWh = 1000  # 1kWh = 1000度電
 time_cycle = 3600/60  # 1小時秒數 / 多久一筆資料的秒數(1小時一筆：3600 ；1分鐘一筆；60)
 
