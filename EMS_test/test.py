@@ -1,33 +1,32 @@
-# 初始狀態
-ev1_initial_soc = 70.1
-ev2_initial_soc = 32.3
-target_soc = 100
-charging_duration = 155  # 充電時長 (分鐘)
-max_charging_power = 100 * 1000 * 60  # 最大充電功率 (kW)
-battery_capacity = 300 *1000 *60  # 電池容量 (kWh)
+def get_corresponding_power(pile_summary, gun_number):
+    # 將 gun_number 的格式拆分成樁組編號和樁號
+    group, number = gun_number.split('-')
+    
+    # 根據樁號選擇對應的另一個樁號
+    if number == '1':
+        corresponding_number = group + '-2'
+    else:
+        corresponding_number = group + '-1'
+    
+    # 從字典中獲取對應樁號的功率
+    corresponding_power = pile_summary[corresponding_number]
+    return corresponding_power
 
+# 示例數據
+pile_summary = {
+    '1-1': 44144.116282665156,
+    '1-2': 29859.590289421827,
+    '2-1': 60255.31914893604,
+    '2-2': 26947.9672869505,
+    '3-1': 61326.043648030005,
+    '3-2': 38673.956351969995,
+    '4-1': 35962.21808134679,
+    '4-2': 47178.423236514514,
+    '5-1': 74413.111014241,
+    '5-2': 25586.888985758986
+}
 
-# 計算兩輛車的充電需求
-ev1_charging_demand = target_soc - ev1_initial_soc
-ev2_charging_demand = target_soc - ev2_initial_soc
-
-# 找到兩輛車充電需求中的最大值，作為共同充電需求
-common_charging_demand = max(ev1_charging_demand, ev2_charging_demand)
-
-# 計算初始充電功率（根據共同充電需求）
-initial_charging_power = common_charging_demand / charging_duration
-
-# 使用共同充電需求來計算最終充電功率，並確保不超過最大充電功率
-ev1_final_charging_power = min(ev1_charging_demand / charging_duration, max_charging_power)
-ev2_final_charging_power = min(ev2_charging_demand / charging_duration, max_charging_power)
-print(f"ev1_final_charging_power: {ev1_final_charging_power}")
-print(f"ev2_final_charging_power: {ev2_final_charging_power}")
-
-# 使用最終充電功率計算最終SOC
-ev1_final_soc = ev1_initial_soc + ev1_final_charging_power * charging_duration
-ev2_final_soc = ev2_initial_soc + ev2_final_charging_power * charging_duration
-
-print(f"ev1_final_charge_soc: {ev1_final_charging_power * charging_duration}")
-print(f"ev2_final_charge_soc: {ev2_final_charging_power * charging_duration}")
-print("Final SOC for EV1:", ev1_final_soc)
-print("Final SOC for EV2:", ev2_final_soc)
+# 示範呼叫
+gun_number = '1-1'
+result = get_corresponding_power(pile_summary, gun_number)
+print(f'The corresponding power for {gun_number} is {result}')
